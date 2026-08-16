@@ -50,6 +50,9 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
   assert.match(inviteMigration, /pg_catalog\.gen_random_uuid/);
   assert.doesNotMatch(inviteMigration, /encode\(gen_random_bytes/);
   assert.match(tasks, /completion_records!completion_records_instance_id_fkey/);
+  assert.match(app, /member\.id === currentUserId/);
+  assert.doesNotMatch(app, /<option>Nicole<\/option><option>伴侣<\/option>/);
+  assert.match(tasks, /table: "household_members"/);
   assert.match(schema, /create or replace function public\.complete_task/);
   assert.match(schema, /create or replace function public\.undo_task_completion/);
   await Promise.all([

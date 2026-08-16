@@ -273,7 +273,7 @@ export function HomeTogetherApp() {
 
   if (!authReady) return <LoadingScreen />;
   if (configured && !session) return <AuthScreen />;
-  return <HouseholdLoader isDemo={!configured} session={session} />;
+  return <HouseholdLoader key={session?.user.id ?? "demo"} isDemo={!configured} session={session} />;
 }
 
 function LoadingScreen() {
@@ -532,7 +532,10 @@ function AppShell({
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const members = isDemo ? DEMO_MEMBERS : snapshot?.members ?? [];
+  const currentUserId = session?.user.id ?? (isDemo ? DEMO_MEMBERS[0].id : null);
+  const members = [...(isDemo ? DEMO_MEMBERS : snapshot?.members ?? [])].sort((left, right) =>
+    Number(right.id === currentUserId) - Number(left.id === currentUserId),
+  );
   const householdName = isDemo ? "Nicole 的家" : snapshot?.householdName ?? "我们的家";
 
   async function toggleTask(task: AppTask) {
@@ -613,7 +616,7 @@ function AppShell({
         </header>
         {loadError && <div className="inline-alert">{loadError}</div>}
         {view === "week" && <WeekView tasks={tasks} members={members} onToggle={toggleTask} onOpen={setDetailTarget} onAdd={() => setShowAdd(true)} />}
-        {view === "calendar" && <CalendarView tasks={tasks} onOpen={setDetailTarget} />}
+        {view === "calendar" && <CalendarView tasks={tasks} members={members} onOpen={setDetailTarget} />}
         {view === "tasks" && <AllTasksView tasks={tasks} onToggle={toggleTask} onOpen={setDetailTarget} onAdd={() => setShowAdd(true)} />}
         {view === "settings" && <SettingsView isDemo={isDemo} snapshot={snapshot} session={session} members={members} />}
       </main>
@@ -702,11 +705,11 @@ function TaskRow({ task, onToggle, onOpen, compact = false }: { task: AppTask; o
   );
 }
 
-function CalendarView({ tasks, onOpen }: { tasks: AppTask[]; onOpen: (task: AppTask) => void }) {
+function CalendarView({ tasks, members, onOpen }: { tasks: AppTask[]; members: HouseholdMember[]; onOpen: (task: AppTask) => void }) {
   const [selectedDate, setSelectedDate] = useState(DEMO_TODAY);
-  const [memberFilter, setMemberFilter] = useState("全部成员");
+  const [memberFilter, setMemberFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("全部类型");
-  const filtered = tasks.filter((task) => (memberFilter === "全部成员" || task.assignee === memberFilter || task.assignee === "共同") && (typeFilter === "全部类型" || (typeFilter === "周期家务" ? task.type === "recurring" : task.type === "one_off")));
+  const filtered = tasks.filter((task) => (memberFilter === "all" || task.assigneeId === memberFilter || task.assigneeMode === "shared") && (typeFilter === "全部类型" || (typeFilter === "周期家务" ? task.type === "recurring" : task.type === "one_off")));
   const monthPrefix = DEMO_TODAY.slice(0, 7);
   const [year, month] = monthPrefix.split("-").map(Number);
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -722,7 +725,7 @@ function CalendarView({ tasks, onOpen }: { tasks: AppTask[]; onOpen: (task: AppT
     <div className="page-shell calendar-page">
       <section className="page-heading"><div><p className="eyebrow">家庭回顾</p><h1>月历</h1><p className="heading-copy">看看这个月，家里发生了哪些小小的完成。</p></div><div className="heading-actions"><button className="icon-button"><ChevronLeft /></button><button className="subtle-button">{year} 年 {month} 月</button><button className="icon-button"><ChevronRight /></button></div></section>
       <section className="month-stats"><div><span className="stat-icon mint"><Check /></span><p><strong>{completed}</strong><span>已完成</span></p></div><div><span className="stat-icon lavender"><Clock3 /></span><p><strong>{Math.max(0, completed - 1)}</strong><span>按时完成</span></p></div><div><span className="stat-icon coral"><Bell /></span><p><strong>{overdue}</strong><span>待补上</span></p></div></section>
-      <section className="calendar-toolbar"><div className="filter-group"><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)} aria-label="按成员筛选"><option>全部成员</option><option>Nicole</option><option>伴侣</option></select><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} aria-label="按类型筛选"><option>全部类型</option><option>周期家务</option><option>一次性家事</option></select></div><div className="calendar-legend"><span><i className="mint" />完成</span><span><i className="mauve" />待办</span><span><i className="coral" />逾期</span></div></section>
+      <section className="calendar-toolbar"><div className="filter-group"><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)} aria-label="按成员筛选"><option value="all">全部成员</option>{members.map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} aria-label="按类型筛选"><option>全部类型</option><option>周期家务</option><option>一次性家事</option></select></div><div className="calendar-legend"><span><i className="mint" />完成</span><span><i className="mauve" />待办</span><span><i className="coral" />逾期</span></div></section>
       <div className="calendar-layout">
         <section className="calendar-card">
           <div className="calendar-weekdays">{WEEK_LABELS.map((day) => <span key={day}>{day}</span>)}</div>
@@ -760,6 +763,7 @@ function SettingsView({ isDemo, snapshot, session, members }: { isDemo: boolean;
   const [weekStart, setWeekStart] = useState("monday");
   const [theme, setTheme] = useState("system");
   const [message, setMessage] = useState("");
+  const currentUserId = session?.user.id ?? (isDemo ? members[0]?.id : null);
 
   async function generateInvite() {
     if (isDemo) { setInviteCode("NICOLE26"); return; }
@@ -782,7 +786,7 @@ function SettingsView({ isDemo, snapshot, session, members }: { isDemo: boolean;
     <div className="page-shell settings-page">
       <section className="page-heading"><div><p className="eyebrow">我们的家</p><h1>设置</h1><p className="heading-copy">成员、时间和偏好，都可以慢慢调整。</p></div><span className={`connection-pill ${isDemo ? "demo" : "live"}`}>{isDemo ? <WifiOff /> : <Wifi />}{isDemo ? "演示模式" : "已连接 Supabase"}</span></section>
       <div className="settings-grid">
-        <section className="settings-card"><div className="settings-card-heading"><span className="setting-icon mauve"><CircleUserRound /></span><div><h2>家庭成员</h2><p>双方拥有完整协作权限</p></div></div><div className="member-list">{members.map((member, index) => <div key={member.id}><Avatar name={member.displayName} /><p><strong>{member.displayName}</strong><span>{index === 0 ? session?.user.email ?? "家庭管理员" : "家庭成员"}</span></p><span className="role-pill">{index === 0 ? "你" : "成员"}</span></div>)}</div><div className="invite-box"><div><UserPlus /><p><strong>邀请伴侣加入</strong><span>邀请码 7 天内有效，仅可使用一次。</span></p></div>{inviteCode ? <div className="invite-code"><strong>{inviteCode}</strong><button onClick={copyInvite}>{copied ? <Check /> : <Copy />}{copied ? "已复制" : "复制"}</button></div> : <button className="secondary-button" onClick={generateInvite}>生成邀请码</button>}</div></section>
+        <section className="settings-card"><div className="settings-card-heading"><span className="setting-icon mauve"><CircleUserRound /></span><div><h2>家庭成员</h2><p>双方拥有完整协作权限</p></div></div><div className="member-list">{members.map((member) => { const isCurrentUser = member.id === currentUserId; return <div key={member.id}><Avatar name={member.displayName} /><p><strong>{member.displayName}</strong><span>{isCurrentUser ? session?.user.email ?? "当前账号" : "家庭成员"}</span></p><span className="role-pill">{isCurrentUser ? "你" : "成员"}</span></div>; })}</div><div className="invite-box"><div><UserPlus /><p><strong>邀请伴侣加入</strong><span>邀请码 7 天内有效，仅可使用一次。</span></p></div>{inviteCode ? <div className="invite-code"><strong>{inviteCode}</strong><button onClick={copyInvite}>{copied ? <Check /> : <Copy />}{copied ? "已复制" : "复制"}</button></div> : <button className="secondary-button" onClick={generateInvite}>生成邀请码</button>}</div></section>
         <section className="settings-card"><div className="settings-card-heading"><span className="setting-icon lavender"><CalendarDays /></span><div><h2>日期与时间</h2><p>决定周视图和日期边界</p></div></div><div className="setting-row"><div><strong>每周从哪天开始</strong><span>影响本周分组与月历排列</span></div><select aria-label="每周开始日" value={weekStart} onChange={(event) => setWeekStart(event.target.value)}><option value="monday">周一</option><option value="sunday">周日</option></select></div><div className="setting-row"><div><strong>家庭时区</strong><span>完成时间统一保存，按此时区显示</span></div><span className="value-chip">{snapshot?.timezone ?? "America/Chicago"}</span></div></section>
         <section className="settings-card"><div className="settings-card-heading"><span className="setting-icon mint"><Sun /></span><div><h2>外观</h2><p>选择更舒服的阅读方式</p></div></div><div className="theme-options"><button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}><Sun />浅色</button><button className={theme === "system" ? "active" : ""} onClick={() => setTheme("system")}><Sparkles />跟随系统</button><button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}><Moon />深色</button></div><div className="toggle-row"><div><strong>轻量庆祝动效</strong><span>完成任务时显示不超过 500ms</span></div><input aria-label="轻量庆祝动效" type="checkbox" defaultChecked /><i /></div></section>
         <section className="settings-card"><div className="settings-card-heading"><span className="setting-icon cream"><Bell /></span><div><h2>提醒</h2><p>这个功能会在后续版本开放</p></div></div><div className="coming-soon"><Bell /><div><strong>每日摘要与到期提醒</strong><span>现在先保持安静，需要时再打开。</span></div><span>P2</span></div></section>

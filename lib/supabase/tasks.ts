@@ -95,7 +95,8 @@ export async function loadHouseholdSnapshot(): Promise<HouseholdSnapshot | null>
       supabase
         .from("household_members")
         .select("profile_id, profiles(display_name, avatar_url)")
-        .eq("household_id", householdId),
+        .eq("household_id", householdId)
+        .order("joined_at", { ascending: true }),
       supabase
         .from("task_instances")
         .select(
@@ -291,6 +292,11 @@ export function subscribeToHousehold(householdId: string, refresh: () => void) {
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "completion_records", filter: `household_id=eq.${householdId}` },
+      refresh,
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "household_members", filter: `household_id=eq.${householdId}` },
       refresh,
     )
     .subscribe();
