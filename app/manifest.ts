@@ -1,0 +1,26 @@
+import type { MetadataRoute } from "next";
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    id: "/",
+    name: "Home Together · 家庭家事",
+    short_name: "Home Together",
+    description: "一起安排、完成和回顾家里的大小事。",
+    start_url: "/",
+    scope: "/",
+    display: "standalone",
+    orientation: "portrait-primary",
+    background_color: "#fffcfa",
+    theme_color: "#b07a95",
+    lang: "zh-CN",
+    categories: ["productivity", "lifestyle"],
+    icons: [
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ],
+    shortcuts: [
+      { name: "查看本周", short_name: "本周", url: "/?view=week", icons: [{ src: "/icon-192.png", sizes: "192x192" }] },
+      { name: "快速添加事项", short_name: "添加", url: "/?action=add", icons: [{ src: "/icon-192.png", sizes: "192x192" }] },
+    ],
+  };
+}
