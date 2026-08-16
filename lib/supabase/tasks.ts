@@ -179,7 +179,12 @@ export async function joinHousehold(code: string) {
   return data as string;
 }
 
-function householdMembershipError(error: { code?: string; message: string }) {
+function householdMembershipError(error: {
+  code?: string;
+  message: string;
+  details?: string | null;
+  hint?: string | null;
+}) {
   if (
     error.code === "23505" ||
     error.message.includes("每个账号只能属于一个家庭") ||
@@ -187,7 +192,10 @@ function householdMembershipError(error: { code?: string; message: string }) {
   ) {
     return new Error("这个账号已经属于一个家庭，不能再创建或加入其他家庭。");
   }
-  return error;
+  const context = [error.message, error.details, error.hint]
+    .filter((part, index, values): part is string => Boolean(part) && values.indexOf(part) === index)
+    .join(" · ");
+  return new Error(`${error.code ? `[${error.code}] ` : ""}${context || "家庭操作失败"}`);
 }
 
 export async function createInvite(householdId: string) {

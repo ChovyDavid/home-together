@@ -402,6 +402,23 @@ function formatAuthError(message: string) {
   return message;
 }
 
+function formatAppError(caught: unknown, fallback: string) {
+  if (caught instanceof Error) return caught.message;
+  if (!caught || typeof caught !== "object") return fallback;
+
+  const record = caught as Record<string, unknown>;
+  const message = typeof record.message === "string" ? record.message : "";
+  const details = typeof record.details === "string" ? record.details : "";
+  const hint = typeof record.hint === "string" ? record.hint : "";
+  const code = typeof record.code === "string" ? record.code : "";
+  const parts = [message, details, hint].filter(
+    (part, index, values) => part && values.indexOf(part) === index,
+  );
+
+  if (parts.length === 0) return fallback;
+  return `${code ? `[${code}] ` : ""}${parts.join(" · ")}`;
+}
+
 function HouseholdLoader({ isDemo, session }: { isDemo: boolean; session: Session | null }) {
   const [snapshot, setSnapshot] = useState<HouseholdSnapshot | null>(null);
   const [loading, setLoading] = useState(!isDemo);
@@ -414,7 +431,7 @@ function HouseholdLoader({ isDemo, session }: { isDemo: boolean; session: Sessio
       setSnapshot(data);
       setError("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "数据加载失败");
+      setError(formatAppError(caught, "数据加载失败"));
     } finally {
       setLoading(false);
     }
@@ -458,7 +475,7 @@ function OnboardingScreen({ onDone, error }: { onDone: () => Promise<void>; erro
       else await joinHousehold(value);
       await onDone();
     } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : "暂时无法完成，请重试");
+      setMessage(formatAppError(caught, "暂时无法完成，请重试"));
     } finally {
       setBusy(false);
     }
@@ -538,7 +555,7 @@ function AppShell({
         await refresh();
       } catch (caught) {
         setTasks((current) => current.map((item) => item.id === task.id ? task : item));
-        setToast(caught instanceof Error ? caught.message : "保存失败，已恢复原状态");
+        setToast(formatAppError(caught, "保存失败，已恢复原状态"));
       }
     }
   }
@@ -564,7 +581,7 @@ function AppShell({
         await refresh();
       } catch (caught) {
         setTasks((current) => current.filter((item) => item.id !== task.id));
-        setToast(caught instanceof Error ? caught.message : "创建失败，请重试");
+        setToast(formatAppError(caught, "创建失败，请重试"));
       }
     }
   }
@@ -750,7 +767,7 @@ function SettingsView({ isDemo, snapshot, session, members }: { isDemo: boolean;
     if (isDemo) { setInviteCode("NICOLE26"); return; }
     if (!snapshot) return;
     try { setInviteCode(await createInvite(snapshot.householdId)); }
-    catch (caught) { setMessage(caught instanceof Error ? caught.message : "暂时无法生成邀请码"); }
+    catch (caught) { setMessage(formatAppError(caught, "暂时无法生成邀请码")); }
   }
 
   async function copyInvite() {
