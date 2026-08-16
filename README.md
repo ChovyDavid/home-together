@@ -7,8 +7,9 @@
 需要 Node.js `>=22.13.0`。
 
 ```bash
-npm install
-npm run dev
+corepack enable
+pnpm install
+pnpm run dev
 ```
 
 未配置 Supabase 时，应用自动进入可操作的演示模式，方便直接体验主要页面与交互。
@@ -34,9 +35,9 @@ npm run dev
 ## 验证
 
 ```bash
-npm run lint
-npm run build
-npm test
+pnpm run lint
+pnpm run build
+pnpm test
 ```
 
 PWA 资源包括 Web App Manifest、Service Worker、192/512 图标、Apple Touch Icon 和社交分享卡片。
@@ -58,6 +59,6 @@ PWA 资源包括 Web App Manifest、Service Worker、192/512 图标、Apple Touc
 本地验证 Pages 版本：
 
 ```bash
-npm run dev:pages
-npm run build:pages
+pnpm run dev:pages
+pnpm run build:pages
 ```

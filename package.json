@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A warm, collaborative household task PWA backed by Supabase.",
   "private": true,
+  "packageManager": "pnpm@11.19.0",
   "engines": {
     "node": ">=22.13.0"
   },
