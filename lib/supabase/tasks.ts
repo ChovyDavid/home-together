@@ -99,7 +99,7 @@ export async function loadHouseholdSnapshot(): Promise<HouseholdSnapshot | null>
       supabase
         .from("task_instances")
         .select(
-          "id, template_id, scheduled_date, status, assignee_profile_id, task_templates!inner(title, category, type, assignee_mode, recurrence_rule, description), completion_records(note, completed_at, is_voided)",
+          "id, template_id, scheduled_date, status, assignee_profile_id, task_templates!inner(title, category, type, assignee_mode, recurrence_rule, description), completion_records!completion_records_instance_id_fkey(note, completed_at, is_voided)",
         )
         .eq("household_id", householdId)
         .order("scheduled_date", { ascending: true }),
