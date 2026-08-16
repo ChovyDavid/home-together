@@ -1,5 +1,8 @@
-const CACHE_NAME = "home-together-v1";
-const APP_SHELL = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
+const CACHE_NAME = "home-together-v2";
+const APP_ROOT = new URL("./", self.registration.scope);
+const APP_SHELL = ["./", "manifest.webmanifest", "icon-192.png", "icon-512.png"].map(
+  (path) => new URL(path, APP_ROOT).href,
+);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -20,6 +23,6 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
       }
       return response;
-    }).catch(() => caches.match(event.request).then((cached) => cached || caches.match("/"))),
+    }).catch(() => caches.match(event.request).then((cached) => cached || caches.match(APP_ROOT.href))),
   );
 });

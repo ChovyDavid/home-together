@@ -1,45 +1,40 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
-async function render(path = "/") {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(
-    new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-}
-
-test("server-renders the Home Together product shell", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-
-  const html = await response.text();
-  assert.match(html, /<title>本周 · Home Together<\/title>/i);
-  assert.match(html, /HOME TOGETHER/);
-  assert.match(html, /这周，我们一起把家照顾好/);
-  assert.match(html, /换床单/);
-  assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
-});
-
-test("ships the installable PWA and Supabase security baseline", async () => {
-  const [manifest, serviceWorker, schema, layout, packageJson] = await Promise.all([
-    readFile(new URL("../app/manifest.ts", import.meta.url), "utf8"),
-    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8"),
-    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../package.json", import.meta.url), "utf8"),
+test("builds a GitHub Pages-ready Home Together application", async () => {
+  const [html, assets] = await Promise.all([
+    readFile(new URL("../gh-pages/index.html", import.meta.url), "utf8"),
+    readdir(new URL("../gh-pages/assets/", import.meta.url)),
   ]);
 
-  assert.match(manifest, /display:\s*"standalone"/);
-  assert.match(manifest, /icon-512\.png/);
-  assert.match(serviceWorker, /CACHE_NAME/);
-  assert.match(serviceWorker, /caches\.match/);
-  assert.match(layout, /og\.png/);
+  assert.match(html, /<title>本周 · Home Together<\/title>/i);
+  assert.match(html, /manifest\.webmanifest/);
+  assert.match(html, /apple-touch-icon\.png/);
+  assert.ok(assets.some((name) => /^index-.*\.js$/.test(name)));
+  assert.ok(assets.some((name) => /^index-.*\.css$/.test(name)));
+  await access(new URL("../gh-pages/.nojekyll", import.meta.url));
+});
+
+test("ships a subpath-safe installable PWA and Supabase security baseline", async () => {
+  const [manifestText, serviceWorker, schema, workflow, pagesConfig, packageJson] = await Promise.all([
+    readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/deploy-pages.yml", import.meta.url), "utf8"),
+    readFile(new URL("../vite.pages.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ]);
+  const manifest = JSON.parse(manifestText);
+
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.start_url, "./");
+  assert.ok(manifest.icons.some((icon) => icon.sizes === "512x512"));
+  assert.match(serviceWorker, /self\.registration\.scope/);
+  assert.doesNotMatch(serviceWorker, /caches\.match\("\/"\)/);
+  assert.match(workflow, /actions\/deploy-pages@v4/);
+  assert.match(workflow, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(pagesConfig, /GITHUB_REPOSITORY/);
   assert.match(packageJson, /@supabase\/supabase-js/);
   assert.match(schema, /enable row level security/);
   assert.match(schema, /create or replace function public\.complete_task/);

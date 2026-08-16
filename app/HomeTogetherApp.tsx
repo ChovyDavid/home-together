@@ -298,7 +298,7 @@ function AuthScreen() {
     setMessage("");
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: window.location.href.split(/[?#]/)[0] },
     });
     setBusy(false);
     setMessage(error ? error.message : "登录链接已经发到邮箱，请在同一设备打开。🌿");

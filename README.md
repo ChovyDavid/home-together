@@ -40,3 +40,24 @@ npm test
 ```
 
 PWA 资源包括 Web App Manifest、Service Worker、192/512 图标、Apple Touch Icon 和社交分享卡片。
+
+## 部署到自己的 GitHub Pages
+
+仓库已包含 `.github/workflows/deploy-pages.yml`。推送到 `main` 后，GitHub Actions 会构建静态站点并发布到 GitHub Pages；普通项目仓库的 `/<repo>/` 子路径会被自动处理。
+
+1. 在 GitHub 新建公开仓库，并把本项目推送到 `main`。
+2. 打开仓库的 **Settings → Pages**，将 **Source** 设为 **GitHub Actions**。
+3. 在 **Settings → Secrets and variables → Actions** 添加：
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+4. 在 Supabase Authentication 的 URL Configuration 中加入最终的 GitHub Pages 地址，例如 `https://<用户名>.github.io/<仓库名>/`。
+5. 重新运行或等待 `Deploy Home Together to GitHub Pages` 工作流完成。
+
+不配置 Supabase secrets 也能先发布，站点会以演示模式运行。
+
+本地验证 Pages 版本：
+
+```bash
+npm run dev:pages
+npm run build:pages
+```
