@@ -17,13 +17,15 @@ test("builds a GitHub Pages-ready Home Together application", async () => {
 });
 
 test("ships a subpath-safe installable PWA and Supabase security baseline", async () => {
-  const [manifestText, serviceWorker, schema, householdMigration, inviteMigration, app, tasks, workflow, pagesConfig, packageJson] = await Promise.all([
+  const [manifestText, serviceWorker, schema, householdMigration, inviteMigration, taskMutationMigration, app, styles, tasks, workflow, pagesConfig, packageJson] = await Promise.all([
     readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
     readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608160001_password_auth_single_household.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608160002_fix_invite_code_generation.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608160003_task_edit_delete.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/HomeTogetherApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../lib/supabase/tasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/deploy-pages.yml", import.meta.url), "utf8"),
     readFile(new URL("../vite.pages.config.ts", import.meta.url), "utf8"),
@@ -53,6 +55,13 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
   assert.match(app, /member\.id === currentUserId/);
   assert.doesNotMatch(app, /<option>Nicole<\/option><option>伴侣<\/option>/);
   assert.match(tasks, /table: "household_members"/);
+  assert.match(tasks, /update_household_task/);
+  assert.match(tasks, /delete_household_task/);
+  assert.match(taskMutationMigration, /create or replace function public\.update_household_task/);
+  assert.match(taskMutationMigration, /create or replace function public\.delete_household_task/);
+  assert.match(app, /useOverlayScrollLock/);
+  assert.match(styles, /overscroll-behavior: none/);
+  assert.match(styles, /height: 100dvh/);
   assert.match(schema, /create or replace function public\.complete_task/);
   assert.match(schema, /create or replace function public\.undo_task_completion/);
   await Promise.all([

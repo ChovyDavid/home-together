@@ -248,6 +248,33 @@ export async function createTaskRecord(
   if (instanceError) throw instanceError;
 }
 
+export async function updateTaskRecord(task: Pick<
+  AppTask,
+  "id" | "title" | "type" | "assigneeMode" | "assigneeId" | "dueDate" | "recurrenceRule"
+>) {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error("Supabase 尚未配置");
+  const { error } = await supabase.rpc("update_household_task", {
+    p_instance_id: task.id,
+    p_title: task.title,
+    p_type: task.type,
+    p_assignee_mode: task.assigneeMode,
+    p_assignee_profile_id: task.assigneeId ?? null,
+    p_scheduled_date: task.dueDate,
+    p_recurrence_rule: task.type === "recurring" ? task.recurrenceRule : null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteTaskRecord(instanceId: string) {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error("Supabase 尚未配置");
+  const { error } = await supabase.rpc("delete_household_task", {
+    p_instance_id: instanceId,
+  });
+  if (error) throw error;
+}
+
 export async function completeTaskRecord(instanceId: string, note?: string) {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error("Supabase 尚未配置");
