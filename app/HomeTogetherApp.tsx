@@ -19,7 +19,6 @@ import {
   LockKeyhole,
   LogOut,
   Mail,
-  Menu,
   Moon,
   MoreHorizontal,
   PawPrint,
@@ -611,7 +610,6 @@ function AppShell({
       <main className="main-content">
         <header className="mobile-header">
           <div className="brand-lockup compact"><div className="brand-mark"><Heart /></div><div><strong>HOME TOGETHER</strong><span>{householdName}</span></div></div>
-          <button className="icon-button" aria-label="打开菜单"><Menu /></button>
         </header>
         {loadError && <div className="inline-alert">{loadError}</div>}
         {view === "week" && <WeekView tasks={tasks} members={members} onToggle={toggleTask} onOpen={setDetailTarget} onAdd={() => setShowAdd(true)} />}
