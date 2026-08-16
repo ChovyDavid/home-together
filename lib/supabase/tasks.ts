@@ -80,7 +80,6 @@ export async function loadHouseholdSnapshot(): Promise<HouseholdSnapshot | null>
     .from("household_members")
     .select("household_id, households(name, timezone, week_start)")
     .eq("profile_id", user.id)
-    .limit(1)
     .maybeSingle();
 
   if (membershipError) throw membershipError;
@@ -166,7 +165,7 @@ export async function createHousehold(name: string) {
     p_name: name,
     p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   });
-  if (error) throw error;
+  if (error) throw householdMembershipError(error);
   return data as string;
 }
 
@@ -176,8 +175,19 @@ export async function joinHousehold(code: string) {
   const { data, error } = await supabase.rpc("join_household_by_invite", {
     p_code: code.trim().toUpperCase(),
   });
-  if (error) throw error;
+  if (error) throw householdMembershipError(error);
   return data as string;
+}
+
+function householdMembershipError(error: { code?: string; message: string }) {
+  if (
+    error.code === "23505" ||
+    error.message.includes("每个账号只能属于一个家庭") ||
+    error.message.includes("household_members_one_household_per_profile")
+  ) {
+    return new Error("这个账号已经属于一个家庭，不能再创建或加入其他家庭。");
+  }
+  return error;
 }
 
 export async function createInvite(householdId: string) {

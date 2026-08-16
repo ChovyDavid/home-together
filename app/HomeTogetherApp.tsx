@@ -16,6 +16,7 @@ import {
   Heart,
   Home,
   LayoutList,
+  LockKeyhole,
   LogOut,
   Mail,
   Menu,
@@ -286,22 +287,70 @@ function LoadingScreen() {
 }
 
 function AuthScreen() {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"success" | "error">("success");
   const [busy, setBusy] = useState(false);
 
-  async function sendMagicLink(event: FormEvent) {
+  function switchMode(nextMode: "login" | "register") {
+    setMode(nextMode);
+    setPassword("");
+    setPasswordConfirm("");
+    setMessage("");
+  }
+
+  async function submitCredentials(event: FormEvent) {
     event.preventDefault();
     const supabase = getSupabaseClient();
     if (!supabase) return;
+
+    if (mode === "register" && displayName.trim().length === 0) {
+      setMessageKind("error");
+      setMessage("请填写你的称呼。");
+      return;
+    }
+    if (password.length < 8) {
+      setMessageKind("error");
+      setMessage("密码至少需要 8 位。");
+      return;
+    }
+    if (mode === "register" && password !== passwordConfirm) {
+      setMessageKind("error");
+      setMessage("两次输入的密码不一致。");
+      return;
+    }
+
     setBusy(true);
     setMessage("");
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.href.split(/[?#]/)[0] },
-    });
+    const normalizedEmail = email.trim().toLowerCase();
+    const appUrl = window.location.href.split(/[?#]/)[0];
+
+    const result = mode === "login"
+      ? await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
+      : await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: {
+            data: { display_name: displayName.trim() },
+            emailRedirectTo: appUrl,
+          },
+        });
+
     setBusy(false);
-    setMessage(error ? error.message : "登录链接已经发到邮箱，请在同一设备打开。🌿");
+    if (result.error) {
+      setMessageKind("error");
+      setMessage(formatAuthError(result.error.message));
+      return;
+    }
+
+    if (mode === "register" && !result.data.session) {
+      setMessageKind("success");
+      setMessage("账号已创建。请先完成一次邮箱确认，然后使用密码登录。");
+    }
   }
 
   return (
@@ -316,17 +365,41 @@ function AuthScreen() {
           <span className="plant-shape"><Droplets /></span>
         </div>
         <h1>欢迎回家</h1>
-        <p>输入邮箱，我们会发一封无需密码的安全登录链接。</p>
-        <form onSubmit={sendMagicLink} className="auth-form">
+        <p>{mode === "login" ? "使用邮箱账号和密码登录。" : "创建账号后，你可以创建或加入一个家庭。"}</p>
+        <div className="segmented-control auth-mode-switch" aria-label="账号操作">
+          <button type="button" className={mode === "login" ? "active" : ""} onClick={() => switchMode("login")}>登录</button>
+          <button type="button" className={mode === "register" ? "active" : ""} onClick={() => switchMode("register")}>注册</button>
+        </div>
+        <form onSubmit={submitCredentials} className="auth-form">
+          {mode === "register" && <>
+            <label htmlFor="display-name">你的称呼</label>
+            <div className="input-with-icon"><CircleUserRound aria-hidden="true" /><input id="display-name" type="text" required maxLength={40} autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="例如：Nicole" /></div>
+          </>}
           <label htmlFor="email">邮箱</label>
-          <div className="input-with-icon"><Mail aria-hidden="true" /><input id="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></div>
-          <button className="primary-button wide" disabled={busy}>{busy ? "正在发送…" : "发送登录链接"}</button>
+          <div className="input-with-icon"><Mail aria-hidden="true" /><input id="email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></div>
+          <label htmlFor="password">密码</label>
+          <div className="input-with-icon"><LockKeyhole aria-hidden="true" /><input id="password" type="password" required minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="至少 8 位" /></div>
+          {mode === "register" && <>
+            <label htmlFor="password-confirm">再次输入密码</label>
+            <div className="input-with-icon"><LockKeyhole aria-hidden="true" /><input id="password-confirm" type="password" required minLength={8} autoComplete="new-password" value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} placeholder="再次输入密码" /></div>
+          </>}
+          <button className="primary-button wide" disabled={busy}>{busy ? "请稍候…" : mode === "login" ? "登录" : "创建账号"}</button>
         </form>
-        {message && <p className="form-message" role="status">{message}</p>}
-        <p className="tiny-copy">继续即表示你同意在家庭成员之间共享任务与完成记录。</p>
+        {message && <p className={`form-message ${messageKind === "error" ? "error" : ""}`} role={messageKind === "error" ? "alert" : "status"}>{message}</p>}
+        <p className="tiny-copy">每个账号只能创建或加入一个家庭。</p>
       </section>
     </main>
   );
+}
+
+function formatAuthError(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("invalid login credentials")) return "邮箱或密码错误。";
+  if (normalized.includes("email not confirmed")) return "请先完成邮箱确认，再使用密码登录。";
+  if (normalized.includes("user already registered")) return "这个邮箱已经注册，请直接登录。";
+  if (normalized.includes("password") && normalized.includes("weak")) return "密码强度不足，请换一个更复杂的密码。";
+  if (normalized.includes("rate limit")) return "操作过于频繁，请稍后再试。";
+  return message;
 }
 
 function HouseholdLoader({ isDemo, session }: { isDemo: boolean; session: Session | null }) {

@@ -337,6 +337,7 @@ svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .plant-shape { width: 40px; height: 40px; right: 50px; bottom: 18px; border-radius: 50% 50% 15px 15px; color: #467963; background: var(--mint); }
 .auth-card h1 { margin: 16px 0 7px; text-align: center; font-size: 30px; }
 .auth-card > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; text-align: center; }
+.auth-mode-switch { width: 100%; margin-top: 20px; }
 .auth-form { margin-top: 22px; display: grid; gap: 10px; }
 .auth-form label { font-size: 11px; font-weight: 800; }
 .auth-form input { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid #ddd4d8; border-radius: 11px; outline: none; }
