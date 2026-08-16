@@ -17,7 +17,7 @@ pnpm run dev
 ## 连接 Supabase
 
 1. 在 Supabase 新建项目。
-2. 新项目在 SQL Editor 执行 `supabase/schema.sql`；已经执行过旧版 schema 的项目改为执行 `supabase/migrations/202608160001_password_auth_single_household.sql`。
+2. 新项目在 SQL Editor 执行 `supabase/schema.sql`；已有项目按文件名顺序执行 `supabase/migrations/` 中尚未应用的迁移。
 3. 复制 `.env.example` 为 `.env.local`，填入项目 URL 与 publishable key。
 4. 在 **Authentication → Sign In / Providers → Email** 启用邮箱密码注册。若希望完全不依赖 Supabase 的邮件额度，可关闭 **Confirm Email**；若保持开启，则只在注册时发送一次确认邮件。
 5. 如果保留邮箱确认，在 Authentication 的 URL Configuration 中加入本地与生产站点 URL。

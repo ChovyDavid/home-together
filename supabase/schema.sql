@@ -231,9 +231,19 @@ declare
   new_code text;
 begin
   if not public.is_household_member(p_household_id) then raise exception 'Access denied'; end if;
-  new_code := upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8));
-  insert into public.household_invites (household_id, code, created_by)
-  values (p_household_id, new_code, (select auth.uid()));
+
+  loop
+    new_code := upper(substr(replace(pg_catalog.gen_random_uuid()::text, '-', ''), 1, 8));
+    begin
+      insert into public.household_invites (household_id, code, created_by)
+      values (p_household_id, new_code, (select auth.uid()));
+      exit;
+    exception when unique_violation then
+      -- An eight-character code collision is unlikely; generate another code.
+      null;
+    end;
+  end loop;
+
   return new_code;
 end;
 $$;
