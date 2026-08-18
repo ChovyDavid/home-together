@@ -69,6 +69,11 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
   assert.match(app, /本周内完成/);
   assert.match(app, /这周还待完成的周期家务/);
   assert.match(app, /task\.type === "recurring" && task\.status === "pending"/);
+  assert.match(app, /setWeekStartDate\(\(current\) => addDays\(current, -7\)\)/);
+  assert.match(app, /setWeekStartDate\(\(current\) => addDays\(current, 7\)\)/);
+  assert.match(app, /function changeMonth\(amount: number\)/);
+  assert.match(app, /aria-label="上一月"/);
+  assert.match(app, /aria-label="下一月"/);
   assert.match(app, /按周完成/);
   assert.match(app, /截止日期/);
   assert.match(app, /useOverlayScrollLock/);

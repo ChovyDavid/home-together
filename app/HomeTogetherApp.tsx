@@ -296,6 +296,12 @@ function formatWeekRange(start: string) {
   return `${formatShortDate(start)} — ${formatShortDate(addDays(start, 6))}`;
 }
 
+function addMonths(monthPrefix: string, amount: number) {
+  const [year, month] = monthPrefix.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + amount, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function initials(name: string) {
   return name.trim().slice(0, 1).toUpperCase();
 }
@@ -803,12 +809,17 @@ function AppShell({
 }
 
 function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[]; members: HouseholdMember[]; onToggle: (task: AppTask) => void; onOpen: (task: AppTask) => void; onAdd: () => void }) {
+  const [weekStartDate, setWeekStartDate] = useState(DEMO_WEEK[0]);
+  const visibleWeek = mondayWeek(weekStartDate);
+  const isCurrentWeek = weekStartDate === DEMO_WEEK[0];
   const weekTasks = tasks.filter((task) => isWeekOneOff(task)
-    ? task.dueDate === DEMO_WEEK[0]
-    : DEMO_WEEK.includes(task.dueDate));
+    ? task.dueDate === visibleWeek[0]
+    : visibleWeek.includes(task.dueDate));
   const completed = weekTasks.filter((task) => task.status === "completed").length;
   const deadlineAlerts = tasks.filter((task) =>
-    isDeadlineOneOff(task) && task.status === "pending" && task.dueDate <= DEMO_TODAY,
+    isDeadlineOneOff(task) && task.status === "pending" && (
+      isCurrentWeek ? task.dueDate <= DEMO_TODAY : visibleWeek.includes(task.dueDate)
+    ),
   );
   const weekCompletionTasks = weekTasks.filter((task) =>
     isWeekOneOff(task) || (task.type === "recurring" && task.status === "pending"),
@@ -821,11 +832,13 @@ function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[
     <div className="page-shell week-page">
       <section className="page-heading week-heading">
         <div>
-          <p className="eyebrow">{formatShortDate(DEMO_WEEK[0])} — {formatShortDate(DEMO_WEEK[6])}</p>
-          <h1>这周，我们一起把家照顾好</h1>
-          <p className="heading-copy">{deadlineAlerts.length ? `今天有 ${deadlineAlerts.length} 件截止事项需要留意。` : "今天没有必须完成的截止事项，按这周的节奏来就好。"}</p>
+          <p className="eyebrow">{formatShortDate(visibleWeek[0])} — {formatShortDate(visibleWeek[6])}</p>
+          <h1>{isCurrentWeek ? "这周，我们一起把家照顾好" : "这一周，家里有哪些安排"}</h1>
+          <p className="heading-copy">{isCurrentWeek
+            ? deadlineAlerts.length ? `今天有 ${deadlineAlerts.length} 件截止事项需要留意。` : "今天没有必须完成的截止事项，按这周的节奏来就好。"
+            : `这一周共有 ${weekTasks.filter((task) => task.status === "pending").length} 件待完成事项。`}</p>
         </div>
-        <div className="heading-actions"><button className="icon-button" aria-label="上一周"><ChevronLeft /></button><button className="subtle-button">回到本周</button><button className="icon-button" aria-label="下一周"><ChevronRight /></button></div>
+        <div className="heading-actions"><button className="icon-button" aria-label="上一周" onClick={() => setWeekStartDate((current) => addDays(current, -7))}><ChevronLeft /></button><button className="subtle-button" onClick={() => setWeekStartDate(DEMO_WEEK[0])} disabled={isCurrentWeek}>回到本周</button><button className="icon-button" aria-label="下一周" onClick={() => setWeekStartDate((current) => addDays(current, 7))}><ChevronRight /></button></div>
       </section>
 
       <section className="progress-card">
@@ -835,9 +848,9 @@ function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[
       </section>
 
       <section className="today-section deadline-section">
-        <div className="section-heading"><div><span className="section-dot coral" /><div><h2>今日截止提醒</h2><p>今天必须完成和已经逾期的一次性家务</p></div></div><span className="count-pill">{deadlineAlerts.length}</span></div>
+        <div className="section-heading"><div><span className="section-dot coral" /><div><h2>{isCurrentWeek ? "今日截止提醒" : "本周截止事项"}</h2><p>{isCurrentWeek ? "今天必须完成和已经逾期的一次性家务" : "这一周有明确截止日期的一次性家务"}</p></div></div><span className="count-pill">{deadlineAlerts.length}</span></div>
         <div className="task-list prominent-list">
-          {deadlineAlerts.length ? deadlineAlerts.map((task) => <TaskRow key={task.id} task={task} onToggle={onToggle} onOpen={onOpen} />) : <EmptyState message="今天没有必须完成的截止事项。" />}
+          {deadlineAlerts.length ? deadlineAlerts.map((task) => <TaskRow key={task.id} task={task} onToggle={onToggle} onOpen={onOpen} />) : <EmptyState message={isCurrentWeek ? "今天没有必须完成的截止事项。" : "这一周没有待完成的截止事项。"} />}
         </div>
       </section>
 
@@ -851,7 +864,7 @@ function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[
       <section className="week-schedule">
         <div className="section-heading"><div><span className="section-dot mauve" /><div><h2>本周日期安排</h2><p>有明确日期的周期家务和截止事项</p></div></div><button className="text-button" onClick={onAdd}><Plus />快速添加</button></div>
         <div className="day-groups">
-          {DEMO_WEEK.map((date, index) => {
+          {visibleWeek.map((date, index) => {
             const dayTasks = weekTasks.filter((task) =>
               !isWeekOneOff(task) && task.dueDate === date && !alertIds.has(task.id) && !weekCompletionIds.has(task.id),
             );
@@ -891,10 +904,11 @@ function TaskRow({ task, onToggle, onOpen, compact = false }: { task: AppTask; o
 
 function CalendarView({ tasks, members, onOpen }: { tasks: AppTask[]; members: HouseholdMember[]; onOpen: (task: AppTask) => void }) {
   const [selectedDate, setSelectedDate] = useState(DEMO_TODAY);
+  const [visibleMonth, setVisibleMonth] = useState(DEMO_TODAY.slice(0, 7));
   const [memberFilter, setMemberFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("全部类型");
   const filtered = tasks.filter((task) => (memberFilter === "all" || task.assigneeId === memberFilter || task.assigneeMode === "shared") && (typeFilter === "全部类型" || (typeFilter === "周期家务" ? task.type === "recurring" : task.type === "one_off")));
-  const monthPrefix = DEMO_TODAY.slice(0, 7);
+  const monthPrefix = visibleMonth;
   const [year, month] = monthPrefix.split("-").map(Number);
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const firstWeekday = (new Date(Date.UTC(year, month - 1, 1)).getUTCDay() + 6) % 7;
@@ -905,9 +919,20 @@ function CalendarView({ tasks, members, onOpen }: { tasks: AppTask[]; members: H
   const completed = monthTasks.filter((task) => task.status === "completed").length;
   const overdue = monthTasks.filter(isOverdue).length;
 
+  function changeMonth(amount: number) {
+    const nextMonth = addMonths(visibleMonth, amount);
+    setVisibleMonth(nextMonth);
+    setSelectedDate(nextMonth === DEMO_TODAY.slice(0, 7) ? DEMO_TODAY : `${nextMonth}-01`);
+  }
+
+  function returnToCurrentMonth() {
+    setVisibleMonth(DEMO_TODAY.slice(0, 7));
+    setSelectedDate(DEMO_TODAY);
+  }
+
   return (
     <div className="page-shell calendar-page">
-      <section className="page-heading"><div><p className="eyebrow">家庭回顾</p><h1>月历</h1><p className="heading-copy">看看这个月，家里发生了哪些小小的完成。</p></div><div className="heading-actions"><button className="icon-button"><ChevronLeft /></button><button className="subtle-button">{year} 年 {month} 月</button><button className="icon-button"><ChevronRight /></button></div></section>
+      <section className="page-heading"><div><p className="eyebrow">家庭回顾</p><h1>月历</h1><p className="heading-copy">看看这个月，家里发生了哪些小小的完成。</p></div><div className="heading-actions"><button className="icon-button" aria-label="上一月" onClick={() => changeMonth(-1)}><ChevronLeft /></button><button className="subtle-button" onClick={returnToCurrentMonth} title="回到本月">{year} 年 {month} 月</button><button className="icon-button" aria-label="下一月" onClick={() => changeMonth(1)}><ChevronRight /></button></div></section>
       <section className="month-stats"><div><span className="stat-icon mint"><Check /></span><p><strong>{completed}</strong><span>已完成</span></p></div><div><span className="stat-icon lavender"><Clock3 /></span><p><strong>{Math.max(0, completed - 1)}</strong><span>按时完成</span></p></div><div><span className="stat-icon coral"><Bell /></span><p><strong>{overdue}</strong><span>待补上</span></p></div></section>
       <section className="calendar-toolbar"><div className="filter-group"><select value={memberFilter} onChange={(event) => setMemberFilter(event.target.value)} aria-label="按成员筛选"><option value="all">全部成员</option>{members.map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} aria-label="按类型筛选"><option>全部类型</option><option>周期家务</option><option>一次性家事</option></select></div><div className="calendar-legend"><span><i className="mint" />完成</span><span><i className="mauve" />待办</span><span><i className="coral" />逾期</span></div></section>
       <div className="calendar-layout">
