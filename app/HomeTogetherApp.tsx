@@ -810,8 +810,11 @@ function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[
   const deadlineAlerts = tasks.filter((task) =>
     isDeadlineOneOff(task) && task.status === "pending" && task.dueDate <= DEMO_TODAY,
   );
-  const weeklyGoals = weekTasks.filter(isWeekOneOff);
+  const weekCompletionTasks = weekTasks.filter((task) =>
+    isWeekOneOff(task) || (task.type === "recurring" && task.status === "pending"),
+  );
   const alertIds = new Set(deadlineAlerts.map((task) => task.id));
+  const weekCompletionIds = new Set(weekCompletionTasks.map((task) => task.id));
   const progress = weekTasks.length ? Math.round((completed / weekTasks.length) * 100) : 0;
 
   return (
@@ -839,9 +842,9 @@ function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[
       </section>
 
       <section className="week-goals">
-        <div className="section-heading"><div><span className="section-dot lavender" /><div><h2>本周内完成</h2><p>没有固定日期，在这周结束前完成即可</p></div></div><span className="count-pill">{weeklyGoals.filter((task) => task.status === "pending").length}</span></div>
+        <div className="section-heading"><div><span className="section-dot lavender" /><div><h2>本周内完成</h2><p>按周事项，以及这周还待完成的周期家务</p></div></div><span className="count-pill">{weekCompletionTasks.filter((task) => task.status === "pending").length}</span></div>
         <div className="task-list">
-          {weeklyGoals.length ? weeklyGoals.map((task) => <TaskRow key={task.id} task={task} onToggle={onToggle} onOpen={onOpen} />) : <EmptyState message="这周还没有按周安排的一次性家务。" />}
+          {weekCompletionTasks.length ? weekCompletionTasks.map((task) => <TaskRow key={task.id} task={task} onToggle={onToggle} onOpen={onOpen} />) : <EmptyState message="这周还没有需要完成的按周事项或周期家务。" />}
         </div>
       </section>
 
@@ -850,7 +853,7 @@ function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[
         <div className="day-groups">
           {DEMO_WEEK.map((date, index) => {
             const dayTasks = weekTasks.filter((task) =>
-              !isWeekOneOff(task) && task.dueDate === date && !alertIds.has(task.id),
+              !isWeekOneOff(task) && task.dueDate === date && !alertIds.has(task.id) && !weekCompletionIds.has(task.id),
             );
             if (!dayTasks.length && date !== DEMO_TODAY) return null;
             return (
