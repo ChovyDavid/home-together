@@ -88,6 +88,10 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
   assert.match(styles, /overscroll-behavior: none/);
   assert.match(styles, /height: 100dvh/);
   assert.match(styles, /input\[type="datetime-local"\]/);
+  assert.match(app, /native-date-control/);
+  assert.match(styles, /\.native-date-control/);
+  assert.match(styles, /inline-size: 100% !important/);
+  assert.match(styles, /-webkit-appearance: none/);
   assert.match(styles, /min-inline-size: 0/);
   assert.match(styles, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /max-width: 100dvw/);
