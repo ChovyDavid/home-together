@@ -1,6 +1,6 @@
-const CACHE_NAME = "home-together-v2";
+const CACHE_NAME = "home-together-v3";
 const APP_ROOT = new URL("./", self.registration.scope);
-const APP_SHELL = ["./", "manifest.webmanifest", "icon-192.png", "icon-512.png"].map(
+const APP_SHELL = ["./", "manifest.webmanifest", "home-together-logo.png", "icon-192.png", "icon-512.png"].map(
   (path) => new URL(path, APP_ROOT).href,
 );
 

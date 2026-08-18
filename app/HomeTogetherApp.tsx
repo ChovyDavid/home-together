@@ -407,7 +407,7 @@ export function HomeTogetherApp() {
 function LoadingScreen() {
   return (
     <main className="loading-screen" aria-live="polite">
-      <div className="brand-mark"><Heart aria-hidden="true" /></div>
+      <BrandMark />
       <p>正在整理今天的家事…</p>
     </main>
   );
@@ -484,7 +484,7 @@ function AuthScreen() {
     <main className="auth-screen">
       <section className="auth-card">
         <div className="brand-lockup">
-          <div className="brand-mark"><Heart aria-hidden="true" /></div>
+          <BrandMark />
           <div><strong>HOME TOGETHER</strong><span>把家里的事，温柔地放在一起</span></div>
         </div>
         <div className="auth-illustration" aria-hidden="true">
@@ -611,7 +611,7 @@ function OnboardingScreen({ onDone, error }: { onDone: () => Promise<void>; erro
   return (
     <main className="auth-screen">
       <section className="auth-card onboarding-card">
-        <div className="brand-mark"><Heart aria-hidden="true" /></div>
+        <BrandMark />
         <h1>{mode === "create" ? "先给这个家起个名字" : "加入伴侣的家庭"}</h1>
         <p>{mode === "create" ? "创建后可以生成邀请码，邀请另一位成员加入。" : "输入对方分享给你的 8 位邀请码。"}</p>
         <div className="segmented-control">
@@ -776,7 +776,7 @@ function AppShell({
     <div className="app-frame">
       <aside className="sidebar">
         <div className="brand-lockup compact">
-          <div className="brand-mark"><Heart aria-hidden="true" /></div>
+          <BrandMark />
           <div><strong>HOME TOGETHER</strong><span>{householdName}</span></div>
         </div>
         <nav className="side-nav" aria-label="主要导航">
@@ -796,7 +796,7 @@ function AppShell({
 
       <main className="main-content">
         <header className="mobile-header">
-          <div className="brand-lockup compact"><div className="brand-mark"><Heart /></div><div><strong>HOME TOGETHER</strong><span>{householdName}</span></div></div>
+          <div className="brand-lockup compact"><BrandMark /><div><strong>HOME TOGETHER</strong><span>{householdName}</span></div></div>
         </header>
         {loadError && <div className="inline-alert">{loadError}</div>}
         {view === "week" && <WeekView tasks={tasks} members={members} onToggle={toggleTask} onOpen={setDetailTarget} onAdd={() => setShowAdd(true)} />}
@@ -1144,6 +1144,10 @@ function DeleteTaskDialog({ task, onClose, onConfirm }: { task: AppTask; onClose
 function Avatar({ name, small = false }: { name: string; small?: boolean }) {
   const tone = name === "Nicole" ? "rose" : name === "共同" ? "shared" : "lavender";
   return <span className={`avatar ${tone} ${small ? "small" : ""}`} aria-label={name}>{name === "共同" ? <Heart /> : initials(name)}</span>;
+}
+
+function BrandMark() {
+  return <div className="brand-mark" aria-hidden="true"><img src={`${import.meta.env.BASE_URL}home-together-logo.png`} alt="" /></div>;
 }
 
 function EmptyState({ message }: { message: string }) {

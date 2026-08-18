@@ -81,6 +81,8 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
   assert.match(app, /按周完成/);
   assert.match(app, /截止日期/);
   assert.match(app, /实际完成时间/);
+  assert.match(app, /home-together-logo\.png/);
+  assert.match(styles, /\.brand-mark img/);
   assert.match(tasks, /p_completed_at/);
   assert.match(app, /useOverlayScrollLock/);
   assert.match(styles, /overscroll-behavior: none/);
