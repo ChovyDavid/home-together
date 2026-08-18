@@ -44,6 +44,7 @@ create table if not exists public.task_templates (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references public.households(id) on delete cascade,
   type text not null check (type in ('recurring', 'one_off')),
+  one_off_timing text check (one_off_timing in ('week', 'deadline')),
   title text not null check (char_length(title) between 1 and 80),
   category text not null default 'home',
   description text,
@@ -58,6 +59,10 @@ create table if not exists public.task_templates (
   constraint recurring_rule_required check (
     (type = 'recurring' and recurrence_rule is not null)
     or (type = 'one_off' and recurrence_rule is null)
+  ),
+  constraint one_off_timing_required check (
+    (type = 'recurring' and one_off_timing is null)
+    or (type = 'one_off' and one_off_timing in ('week', 'deadline'))
   )
 );
 
@@ -392,6 +397,7 @@ create or replace function public.update_household_task(
   p_instance_id uuid,
   p_title text,
   p_type text,
+  p_one_off_timing text,
   p_assignee_mode text,
   p_assignee_profile_id uuid,
   p_scheduled_date date,
@@ -427,6 +433,9 @@ begin
   if p_type = 'recurring' and p_recurrence_rule is null then
     raise exception '周期家务需要重复规则';
   end if;
+  if p_type = 'one_off' and (p_one_off_timing is null or p_one_off_timing not in ('week', 'deadline')) then
+    raise exception '一次性家务必须选择按周完成或截止日期';
+  end if;
 
   if p_assignee_mode = 'member' then
     if p_assignee_profile_id is null or not exists (
@@ -443,6 +452,7 @@ begin
   update public.task_templates
   set title = trim(p_title),
       type = p_type,
+      one_off_timing = case when p_type = 'one_off' then p_one_off_timing else null end,
       assignee_mode = p_assignee_mode,
       assignee_profile_id = p_assignee_profile_id,
       recurrence_rule = case when p_type = 'recurring' then p_recurrence_rule else null end
@@ -549,7 +559,7 @@ grant execute on function public.create_household_invite(uuid) to authenticated;
 grant execute on function public.join_household_by_invite(text) to authenticated;
 grant execute on function public.complete_task(uuid, text) to authenticated;
 grant execute on function public.undo_task_completion(uuid) to authenticated;
-grant execute on function public.update_household_task(uuid, text, text, text, uuid, date, jsonb) to authenticated;
+grant execute on function public.update_household_task(uuid, text, text, text, text, uuid, date, jsonb) to authenticated;
 grant execute on function public.delete_household_task(uuid) to authenticated;
 
 do $$

@@ -90,7 +90,7 @@ svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .avatar.shared svg { width: 14px; fill: rgba(67,121,103,.16); }
 .avatar.small { width: 23px; height: 23px; border-width: 1px; font-size: 8px; }
 
-.today-section, .week-schedule { margin-top: 34px; }
+.today-section, .week-goals, .week-schedule { margin-top: 34px; }
 .section-heading { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
 .section-heading > div:first-child { display: flex; align-items: center; gap: 11px; }
 .section-heading h2 { margin: 0; font-size: 18px; }
@@ -98,7 +98,10 @@ svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .section-dot { width: 10px; height: 10px; display: block; border-radius: 50%; box-shadow: 0 0 0 6px rgba(176,122,149,.08); }
 .section-dot.coral { background: var(--coral); }
 .section-dot.mauve { background: var(--mauve); }
+.section-dot.lavender { background: #8f7fc8; }
 .count-pill { min-width: 28px; padding: 5px 9px; border-radius: 99px; color: var(--mauve-dark); background: var(--mauve-soft); font-size: 12px; font-weight: 800; text-align: center; }
+.deadline-section { padding: 20px; border: 1px solid rgba(219,123,105,.22); border-radius: 20px; background: linear-gradient(135deg, rgba(255,240,236,.72), rgba(255,255,255,.9)); }
+.deadline-section .count-pill { color: #a35447; background: var(--coral-soft); }
 .task-list { display: grid; gap: 9px; }
 .task-row { min-width: 0; padding: 15px 14px; display: grid; grid-template-columns: 38px 42px minmax(0, 1fr) 36px; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); box-shadow: 0 8px 28px rgba(80,55,67,.045); transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease; cursor: pointer; }
 .task-row:hover { transform: translateY(-1px); box-shadow: 0 12px 34px rgba(80,55,67,.08); }
@@ -117,6 +120,8 @@ svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .task-title-line h3 { margin: 0; overflow: hidden; font-size: 15px; white-space: nowrap; text-overflow: ellipsis; }
 .type-pill, .role-pill { padding: 4px 7px; display: inline-flex; align-items: center; gap: 3px; border-radius: 99px; color: var(--mauve-dark); background: var(--mauve-soft); font-size: 9px; font-weight: 800; white-space: nowrap; }
 .type-pill svg { width: 11px; height: 11px; }
+.type-pill.week { color: #625598; background: var(--lavender); }
+.type-pill.deadline { color: #a35447; background: var(--coral-soft); }
 .task-meta { margin-top: 7px; display: flex; align-items: center; flex-wrap: wrap; gap: 9px 14px; color: var(--muted); font-size: 11px; }
 .task-meta > span { display: inline-flex; align-items: center; gap: 4px; }
 .task-meta svg { width: 13px; height: 13px; }
@@ -275,7 +280,10 @@ svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .type-picker button svg { grid-row: 1 / span 2; color: var(--mauve-dark); }
 .type-picker button small { color: var(--muted); font-size: 9px; font-weight: 500; }
 .type-picker button.active { border-color: #d1a8bb; background: var(--mauve-soft); }
+.timing-picker button:first-child.active { border-color: #b7ace1; background: rgba(221,214,254,.48); }
+.timing-picker button:last-child.active { border-color: #e2b1a8; background: rgba(255,230,224,.52); }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.week-preview { color: var(--muted); font-size: 9px; line-height: 1.45; }
 .recurrence-field > div { display: grid; grid-template-columns: auto 90px 1fr; align-items: center; gap: 8px; }
 .recurrence-field small { color: var(--muted); }
 .modal-actions { margin-top: 8px; display: flex; justify-content: flex-end; gap: 9px; }
@@ -397,7 +405,8 @@ svg { width: 20px; height: 20px; stroke-width: 1.8; }
   .week-heading .heading-actions { display: none; }
   .progress-card { padding: 16px; grid-template-columns: 1fr; gap: 15px; }
   .progress-visual { grid-template-columns: auto 1fr auto; }
-  .today-section, .week-schedule { margin-top: 28px; }
+  .today-section, .week-goals, .week-schedule { margin-top: 28px; }
+  .deadline-section { padding: 16px 12px; }
   .task-row { grid-template-columns: 36px minmax(0, 1fr) 30px; gap: 9px; padding: 13px 11px; }
   .task-row .task-icon { display: none; }
   .task-title-line h3 { font-size: 14px; }

@@ -155,6 +155,7 @@ const DEMO_TASKS: AppTask[] = [
     title: "联系物业确认门禁卡",
     category: "admin",
     type: "one_off",
+    oneOffTiming: "deadline",
     assignee: "Nicole",
     assigneeId: "nicole",
     assigneeMode: "member",
@@ -231,10 +232,11 @@ const DEMO_TASKS: AppTask[] = [
     title: "预约年度体检",
     category: "admin",
     type: "one_off",
+    oneOffTiming: "week",
     assignee: "伴侣",
     assigneeId: "partner",
     assigneeMode: "member",
-    dueDate: DEMO_WEEK[1],
+    dueDate: DEMO_WEEK[0],
     status: "completed",
     completedAt: `${DEMO_WEEK[2]}T09:30:00-05:00`,
     note: "约在 9 月 3 日上午。",
@@ -252,6 +254,18 @@ const DEMO_TASKS: AppTask[] = [
     recurrenceRule: { kind: "interval_days", interval: 90 },
     lastCompleted: "5 月 26 日",
     nextDue: "8 月 24 日",
+  },
+  {
+    id: "demo-9",
+    title: "整理储物柜",
+    category: "home",
+    type: "one_off",
+    oneOffTiming: "week",
+    assignee: "共同",
+    assigneeMode: "shared",
+    dueDate: DEMO_WEEK[0],
+    status: "pending",
+    description: "这周找一个合适的时间整理即可。",
   },
 ];
 
@@ -278,20 +292,72 @@ function formatShortDate(value: string) {
   return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
 }
 
+function formatWeekRange(start: string) {
+  return `${formatShortDate(start)} — ${formatShortDate(addDays(start, 6))}`;
+}
+
 function initials(name: string) {
   return name.trim().slice(0, 1).toUpperCase();
 }
 
+function isWeekOneOff(task: AppTask) {
+  return task.type === "one_off" && task.oneOffTiming === "week";
+}
+
+function isDeadlineOneOff(task: AppTask) {
+  return task.type === "one_off" && task.oneOffTiming !== "week";
+}
+
+function taskWindowEnd(task: AppTask) {
+  return isWeekOneOff(task) ? addDays(task.dueDate, 6) : task.dueDate;
+}
+
 function isOverdue(task: AppTask) {
-  return task.status === "pending" && task.dueDate < DEMO_TODAY;
+  return task.status === "pending" && taskWindowEnd(task) < DEMO_TODAY;
 }
 
 function taskStatus(task: AppTask) {
   if (task.status === "completed") return "completed";
   if (task.status === "skipped") return "skipped";
-  if (task.dueDate === DEMO_TODAY) return "today";
   if (isOverdue(task)) return "overdue";
+  if (!isWeekOneOff(task) && task.dueDate === DEMO_TODAY) return "today";
   return "pending";
+}
+
+function taskTimingText(task: AppTask) {
+  if (isWeekOneOff(task)) {
+    return task.dueDate === DEMO_WEEK[0] ? "本周内完成" : `${formatWeekRange(task.dueDate)} 内完成`;
+  }
+  if (isDeadlineOneOff(task)) {
+    if (isOverdue(task)) {
+      const days = Math.max(1, Math.round(
+        (new Date(`${DEMO_TODAY}T12:00:00Z`).getTime() - new Date(`${task.dueDate}T12:00:00Z`).getTime()) / 86400000,
+      ));
+      return `已逾期 ${days} 天`;
+    }
+    return task.dueDate === DEMO_TODAY ? "今天截止" : `${formatShortDate(task.dueDate)} 前完成`;
+  }
+  if (isOverdue(task)) {
+    const days = Math.max(1, Math.round(
+      (new Date(`${DEMO_TODAY}T12:00:00Z`).getTime() - new Date(`${task.dueDate}T12:00:00Z`).getTime()) / 86400000,
+    ));
+    return `已经晚了 ${days} 天`;
+  }
+  return task.dueDate === DEMO_TODAY ? "今天" : formatShortDate(task.dueDate);
+}
+
+function taskStatusText(task: AppTask) {
+  if (task.status === "completed") return "已完成";
+  if (isOverdue(task)) return "等待补上";
+  if (isWeekOneOff(task)) return "本周内完成";
+  if (isDeadlineOneOff(task) && task.dueDate === DEMO_TODAY) return "今天截止";
+  if (task.dueDate === DEMO_TODAY) return "今天";
+  return "待办";
+}
+
+function wasCompletedOnTime(task: AppTask) {
+  const completedDate = task.completedAt?.slice(0, 10);
+  return Boolean(completedDate && completedDate <= taskWindowEnd(task));
 }
 
 export function HomeTogetherApp() {
@@ -643,6 +709,7 @@ function AppShell({
           ...item,
           title: task.title,
           type: task.type,
+          oneOffTiming: task.oneOffTiming,
           assignee: task.assignee,
           assigneeId: task.assigneeId,
           assigneeMode: task.assigneeMode,
@@ -736,9 +803,15 @@ function AppShell({
 }
 
 function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[]; members: HouseholdMember[]; onToggle: (task: AppTask) => void; onOpen: (task: AppTask) => void; onAdd: () => void }) {
-  const weekTasks = tasks.filter((task) => DEMO_WEEK.includes(task.dueDate));
+  const weekTasks = tasks.filter((task) => isWeekOneOff(task)
+    ? task.dueDate === DEMO_WEEK[0]
+    : DEMO_WEEK.includes(task.dueDate));
   const completed = weekTasks.filter((task) => task.status === "completed").length;
-  const focusTasks = weekTasks.filter((task) => task.status === "pending" && task.dueDate <= DEMO_TODAY);
+  const deadlineAlerts = tasks.filter((task) =>
+    isDeadlineOneOff(task) && task.status === "pending" && task.dueDate <= DEMO_TODAY,
+  );
+  const weeklyGoals = weekTasks.filter(isWeekOneOff);
+  const alertIds = new Set(deadlineAlerts.map((task) => task.id));
   const progress = weekTasks.length ? Math.round((completed / weekTasks.length) * 100) : 0;
 
   return (
@@ -747,7 +820,7 @@ function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[
         <div>
           <p className="eyebrow">{formatShortDate(DEMO_WEEK[0])} — {formatShortDate(DEMO_WEEK[6])}</p>
           <h1>这周，我们一起把家照顾好</h1>
-          <p className="heading-copy">今天可以先处理 {focusTasks.length} 件事，其他的慢慢来。</p>
+          <p className="heading-copy">{deadlineAlerts.length ? `今天有 ${deadlineAlerts.length} 件截止事项需要留意。` : "今天没有必须完成的截止事项，按这周的节奏来就好。"}</p>
         </div>
         <div className="heading-actions"><button className="icon-button" aria-label="上一周"><ChevronLeft /></button><button className="subtle-button">回到本周</button><button className="icon-button" aria-label="下一周"><ChevronRight /></button></div>
       </section>
@@ -758,18 +831,27 @@ function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[
         <div className="member-stack">{members.slice(0, 2).map((member) => <Avatar key={member.id} name={member.displayName} />)}</div>
       </section>
 
-      <section className="today-section">
-        <div className="section-heading"><div><span className="section-dot coral" /><div><h2>今天可以处理</h2><p>今日到期和需要补上的事项</p></div></div><span className="count-pill">{focusTasks.length}</span></div>
+      <section className="today-section deadline-section">
+        <div className="section-heading"><div><span className="section-dot coral" /><div><h2>今日截止提醒</h2><p>今天必须完成和已经逾期的一次性家务</p></div></div><span className="count-pill">{deadlineAlerts.length}</span></div>
         <div className="task-list prominent-list">
-          {focusTasks.length ? focusTasks.map((task) => <TaskRow key={task.id} task={task} onToggle={onToggle} onOpen={onOpen} />) : <EmptyState message="今天没有着急的事项，可以轻松一点。" />}
+          {deadlineAlerts.length ? deadlineAlerts.map((task) => <TaskRow key={task.id} task={task} onToggle={onToggle} onOpen={onOpen} />) : <EmptyState message="今天没有必须完成的截止事项。" />}
+        </div>
+      </section>
+
+      <section className="week-goals">
+        <div className="section-heading"><div><span className="section-dot lavender" /><div><h2>本周内完成</h2><p>没有固定日期，在这周结束前完成即可</p></div></div><span className="count-pill">{weeklyGoals.filter((task) => task.status === "pending").length}</span></div>
+        <div className="task-list">
+          {weeklyGoals.length ? weeklyGoals.map((task) => <TaskRow key={task.id} task={task} onToggle={onToggle} onOpen={onOpen} />) : <EmptyState message="这周还没有按周安排的一次性家务。" />}
         </div>
       </section>
 
       <section className="week-schedule">
-        <div className="section-heading"><div><span className="section-dot mauve" /><div><h2>本周安排</h2><p>按日期查看家里的节奏</p></div></div><button className="text-button" onClick={onAdd}><Plus />快速添加</button></div>
+        <div className="section-heading"><div><span className="section-dot mauve" /><div><h2>本周日期安排</h2><p>有明确日期的周期家务和截止事项</p></div></div><button className="text-button" onClick={onAdd}><Plus />快速添加</button></div>
         <div className="day-groups">
           {DEMO_WEEK.map((date, index) => {
-            const dayTasks = weekTasks.filter((task) => task.dueDate === date && !(task.status === "pending" && date <= DEMO_TODAY));
+            const dayTasks = weekTasks.filter((task) =>
+              !isWeekOneOff(task) && task.dueDate === date && !alertIds.has(task.id),
+            );
             if (!dayTasks.length && date !== DEMO_TODAY) return null;
             return (
               <div className={`day-group ${date === DEMO_TODAY ? "current" : ""}`} key={date}>
@@ -787,7 +869,7 @@ function WeekView({ tasks, members, onToggle, onOpen, onAdd }: { tasks: AppTask[
 function TaskRow({ task, onToggle, onOpen, compact = false }: { task: AppTask; onToggle: (task: AppTask) => void; onOpen: (task: AppTask) => void; compact?: boolean }) {
   const Icon = CATEGORY_ICONS[task.category] ?? Sparkles;
   const state = taskStatus(task);
-  const timing = state === "overdue" ? `已经晚了 ${Math.max(1, Math.round((new Date(DEMO_TODAY).getTime() - new Date(task.dueDate).getTime()) / 86400000))} 天` : task.dueDate === DEMO_TODAY ? "今天" : formatShortDate(task.dueDate);
+  const timing = taskTimingText(task);
   return (
     <div
       className={`task-row ${state} ${compact ? "compact" : ""}`}
@@ -798,7 +880,7 @@ function TaskRow({ task, onToggle, onOpen, compact = false }: { task: AppTask; o
     >
       <button className="task-check" onClick={(event) => { event.stopPropagation(); onToggle(task); }} aria-label={task.status === "completed" ? `撤销完成：${task.title}` : `完成：${task.title}`}><Check /></button>
       <span className="task-icon"><Icon aria-hidden="true" /></span>
-      <div className="task-main"><div className="task-title-line"><h3>{task.title}</h3>{task.type === "recurring" && <span className="type-pill"><Repeat2 />周期</span>}</div><div className="task-meta"><span className={state === "overdue" ? "overdue-copy" : ""}><Clock3 />{timing}</span><span className="assignee-chip"><Avatar name={task.assignee} small />{task.assignee}</span>{task.recurrence && <span>{task.recurrence}</span>}</div>{task.note && !compact && <p className="task-note">“{task.note}”</p>}</div>
+      <div className="task-main"><div className="task-title-line"><h3>{task.title}</h3>{task.type === "recurring" && <span className="type-pill"><Repeat2 />周期</span>}{isWeekOneOff(task) && <span className="type-pill week"><CalendarDays />按周</span>}{isDeadlineOneOff(task) && <span className="type-pill deadline"><Bell />截止</span>}</div><div className="task-meta"><span className={state === "overdue" ? "overdue-copy" : ""}><Clock3 />{timing}</span><span className="assignee-chip"><Avatar name={task.assignee} small />{task.assignee}</span>{task.recurrence && <span>{task.recurrence}</span>}</div>{task.note && !compact && <p className="task-note">“{task.note}”</p>}</div>
       <button className="more-button" aria-label={`查看 ${task.title} 详情`}><MoreHorizontal /></button>
     </div>
   );
@@ -836,7 +918,7 @@ function CalendarView({ tasks, members, onOpen }: { tasks: AppTask[]; members: H
             })}
           </div>
         </section>
-        <aside className="date-drawer"><div className="drawer-date"><span>{month} 月</span><strong>{Number(selectedDate.slice(-2))}</strong><em>{selectedDate === DEMO_TODAY ? "今天" : WEEK_LABELS[(new Date(`${selectedDate}T12:00:00`).getDay() + 6) % 7]}</em></div><div className="drawer-section-title"><h2>这一天的家事</h2><span>{selectedTasks.length}</span></div><div className="drawer-tasks">{selectedTasks.length ? selectedTasks.map((task) => <button key={task.id} onClick={() => onOpen(task)}><span className={`drawer-status ${taskStatus(task)}`}><Check /></span><div><strong>{task.title}</strong><span>{task.status === "completed" ? task.completedAt?.slice(0, 10) === task.dueDate ? "按时完成" : "补做完成" : isOverdue(task) ? "等待补上" : "计划事项"}</span>{task.note && <small>{task.note}</small>}</div></button>) : <EmptyState message="这一天没有安排，留给生活一点空白。" />}</div></aside>
+        <aside className="date-drawer"><div className="drawer-date"><span>{month} 月</span><strong>{Number(selectedDate.slice(-2))}</strong><em>{selectedDate === DEMO_TODAY ? "今天" : WEEK_LABELS[(new Date(`${selectedDate}T12:00:00`).getDay() + 6) % 7]}</em></div><div className="drawer-section-title"><h2>这一天的家事</h2><span>{selectedTasks.length}</span></div><div className="drawer-tasks">{selectedTasks.length ? selectedTasks.map((task) => <button key={task.id} onClick={() => onOpen(task)}><span className={`drawer-status ${taskStatus(task)}`}><Check /></span><div><strong>{task.title}</strong><span>{task.status === "completed" ? wasCompletedOnTime(task) ? "按时完成" : "补做完成" : taskStatusText(task)}</span>{task.note && <small>{task.note}</small>}</div></button>) : <EmptyState message="这一天没有安排，留给生活一点空白。" />}</div></aside>
       </div>
     </div>
   );
@@ -901,6 +983,9 @@ function TaskEditorModal({ initialTask, members, onClose, onSave }: { initialTas
   const initialKind = initialTask?.recurrenceRule?.kind;
   const [title, setTitle] = useState(initialTask?.title ?? "");
   const [type, setType] = useState<AppTask["type"]>(initialTask?.type ?? "one_off");
+  const [oneOffTiming, setOneOffTiming] = useState<"week" | "deadline">(
+    initialTask?.oneOffTiming === "deadline" ? "deadline" : "week",
+  );
   const [date, setDate] = useState(initialTask?.dueDate ?? DEMO_TODAY);
   const [assignee, setAssignee] = useState(
     initialTask?.assigneeMode === "member" ? initialTask.assigneeId ?? "unassigned" : initialTask?.assigneeMode ?? "shared",
@@ -920,20 +1005,23 @@ function TaskEditorModal({ initialTask, members, onClose, onSave }: { initialTas
       title: "",
       category: "home",
       type: "one_off",
+      oneOffTiming: "week",
       assignee: "未分配",
       assigneeMode: "unassigned",
       dueDate: date,
       status: "pending",
     };
     const normalizedInterval = Math.max(1, Math.min(365, interval || 1));
+    const normalizedDate = type === "one_off" && oneOffTiming === "week" ? mondayWeek(date)[0] : date;
     onSave({
       ...baseTask,
       title: title.trim(),
       type,
+      oneOffTiming: type === "one_off" ? oneOffTiming : null,
       assignee: shared ? "共同" : selected?.displayName ?? "未分配",
       assigneeId: selected?.id ?? null,
       assigneeMode: shared ? "shared" : selected ? "member" : "unassigned",
-      dueDate: date,
+      dueDate: normalizedDate,
       recurrence: type === "recurring" ? recurrenceText(recurrenceKind, normalizedInterval) : undefined,
       recurrenceRule: type === "recurring" ? { kind: recurrenceKind, interval: normalizedInterval, keep_schedule: Boolean(initialTask?.recurrenceRule?.keep_schedule) } : null,
       lastCompleted: type === "recurring" ? initialTask?.lastCompleted : undefined,
@@ -948,7 +1036,8 @@ function TaskEditorModal({ initialTask, members, onClose, onSave }: { initialTas
         <form onSubmit={submit}>
           <label className="field"><span>事项名称</span><input required maxLength={80} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：联系物业" /></label>
           <div className="field"><span>类型</span><div className="type-picker"><button type="button" className={type === "one_off" ? "active" : ""} onClick={() => setType("one_off")}><ClipboardCheck />一次性家事<small>完成后不再重复</small></button><button type="button" className={type === "recurring" ? "active" : ""} onClick={() => setType("recurring")}><Repeat2 />周期家务<small>按节奏自动出现</small></button></div></div>
-          <div className="form-grid"><label className="field"><span>计划日期</span><input type="date" required value={date} onChange={(event) => setDate(event.target.value)} /></label><label className="field"><span>负责人</span><select value={assignee} onChange={(event) => setAssignee(event.target.value)}><option value="shared">共同</option>{members.map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}<option value="unassigned">未分配</option></select></label></div>
+          {type === "one_off" && <div className="field"><span>完成方式</span><div className="type-picker timing-picker"><button type="button" className={oneOffTiming === "week" ? "active" : ""} onClick={() => setOneOffTiming("week")}><CalendarDays />按周完成<small>在选定的一周内完成即可</small></button><button type="button" className={oneOffTiming === "deadline" ? "active" : ""} onClick={() => setOneOffTiming("deadline")}><Bell />截止日期<small>必须在指定日期前完成</small></button></div></div>}
+          <div className="form-grid"><label className="field"><span>{type === "recurring" ? "首次计划日期" : oneOffTiming === "week" ? "选择所在周" : "截止日期"}</span><input type="date" required value={date} onChange={(event) => setDate(event.target.value)} />{type === "one_off" && oneOffTiming === "week" && <small className="week-preview">将作为 {formatWeekRange(mondayWeek(date)[0])} 的本周事项</small>}</label><label className="field"><span>负责人</span><select value={assignee} onChange={(event) => setAssignee(event.target.value)}><option value="shared">共同</option>{members.map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}<option value="unassigned">未分配</option></select></label></div>
           {type === "recurring" && <label className="field recurrence-field"><span>重复节奏</span><div><span>每</span><input type="number" min={1} max={365} value={interval} onChange={(event) => setInterval(Number(event.target.value))} /><select aria-label="重复周期单位" value={recurrenceKind} onChange={(event) => setRecurrenceKind(event.target.value as RecurrenceKind)}><option value="interval_days">天</option><option value="weekly">周</option><option value="monthly">月</option></select></div><small>默认从实际完成日重新计算下一次。</small></label>}
           <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button">{editing ? <Pencil /> : <Plus />}{editing ? "保存修改" : "加入清单"}</button></div>
         </form>
@@ -979,9 +1068,9 @@ function TaskDetail({ task, onClose, onToggle, onEdit, onDelete }: { task: AppTa
     <div className="detail-backdrop">
       <aside className="detail-panel" role="dialog" aria-modal="true" aria-labelledby="detail-title">
         <div className="detail-top"><span className="task-icon large"><Icon /></span><div className="detail-top-actions"><button className="icon-button" onClick={() => onEdit(task)} aria-label="编辑家务"><Pencil /></button><button className="icon-button" onClick={onClose} aria-label="关闭详情"><X /></button></div></div>
-        <div className="detail-title"><p>{task.type === "recurring" ? "周期家务" : "一次性家事"}</p><h2 id="detail-title">{task.title}</h2><span className={`status-label ${taskStatus(task)}`}>{task.status === "completed" ? "已完成" : isOverdue(task) ? "等待补上" : task.dueDate === DEMO_TODAY ? "今天" : "待办"}</span></div>
+        <div className="detail-title"><p>{task.type === "recurring" ? "周期家务" : isWeekOneOff(task) ? "一次性家务 · 按周完成" : "一次性家务 · 截止日期"}</p><h2 id="detail-title">{task.title}</h2><span className={`status-label ${taskStatus(task)}`}>{taskStatusText(task)}</span></div>
         {task.description && <p className="detail-description">{task.description}</p>}
-        <div className="detail-facts"><div><Clock3 /><span>计划日期</span><strong>{formatShortDate(task.dueDate)}</strong></div><div><CircleUserRound /><span>负责人</span><strong>{task.assignee}</strong></div>{task.recurrence && <div><Repeat2 /><span>重复规则</span><strong>{task.recurrence}</strong></div>}</div>
+        <div className="detail-facts"><div><Clock3 /><span>{task.type === "recurring" ? "计划日期" : isWeekOneOff(task) ? "完成周" : "截止日期"}</span><strong>{isWeekOneOff(task) ? formatWeekRange(task.dueDate) : formatShortDate(task.dueDate)}</strong></div><div><CircleUserRound /><span>负责人</span><strong>{task.assignee}</strong></div>{task.recurrence && <div><Repeat2 /><span>重复规则</span><strong>{task.recurrence}</strong></div>}</div>
         {task.type === "recurring" && <section className="rhythm-card"><h3>这个事项的节奏</h3><div><p><span>上次完成</span><strong>{task.lastCompleted ?? "还没有记录"}</strong></p><i /><p><span>下次应做</span><strong>{task.nextDue ?? formatShortDate(task.dueDate)}</strong></p></div><small>提前完成后，默认从实际完成日重新计算。</small></section>}
         <section className="history-section"><h3>最近记录</h3>{task.status === "completed" ? <div className="history-item"><span><Check /></span><div><strong>{task.completedAt ? formatShortDate(task.completedAt.slice(0, 10)) : "今天"} 完成</strong><p>{task.note || "没有添加备注"}</p></div></div> : <EmptyState message="完成后会在这里留下记录。" />}</section>
         <div className="detail-actions"><button className={task.status === "completed" ? "secondary-button wide" : "primary-button wide"} onClick={() => onToggle(task)}>{task.status === "completed" ? "撤销完成" : <><Check />标记完成</>}</button><button className="secondary-button wide" onClick={() => onEdit(task)}><Pencil />编辑家务</button><button className="danger-button wide" onClick={() => onDelete(task)}><Trash2 />删除家务</button></div>

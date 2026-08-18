@@ -17,13 +17,14 @@ test("builds a GitHub Pages-ready Home Together application", async () => {
 });
 
 test("ships a subpath-safe installable PWA and Supabase security baseline", async () => {
-  const [manifestText, serviceWorker, schema, householdMigration, inviteMigration, taskMutationMigration, app, styles, tasks, workflow, pagesConfig, packageJson] = await Promise.all([
+  const [manifestText, serviceWorker, schema, householdMigration, inviteMigration, taskMutationMigration, oneOffTimingMigration, app, styles, tasks, workflow, pagesConfig, packageJson] = await Promise.all([
     readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
     readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608160001_password_auth_single_household.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608160002_fix_invite_code_generation.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608160003_task_edit_delete.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608170001_one_off_task_timing.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/HomeTogetherApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../lib/supabase/tasks.ts", import.meta.url), "utf8"),
@@ -59,6 +60,15 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
   assert.match(tasks, /delete_household_task/);
   assert.match(taskMutationMigration, /create or replace function public\.update_household_task/);
   assert.match(taskMutationMigration, /create or replace function public\.delete_household_task/);
+  assert.match(schema, /one_off_timing in \('week', 'deadline'\)/);
+  assert.match(oneOffTimingMigration, /add column if not exists one_off_timing/);
+  assert.match(oneOffTimingMigration, /set one_off_timing = 'deadline'/);
+  assert.match(oneOffTimingMigration, /一次性家务必须选择按周完成或截止日期/);
+  assert.match(tasks, /one_off_timing/);
+  assert.match(app, /今日截止提醒/);
+  assert.match(app, /本周内完成/);
+  assert.match(app, /按周完成/);
+  assert.match(app, /截止日期/);
   assert.match(app, /useOverlayScrollLock/);
   assert.match(styles, /overscroll-behavior: none/);
   assert.match(styles, /height: 100dvh/);

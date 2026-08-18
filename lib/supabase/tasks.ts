@@ -13,6 +13,7 @@ export type AppTask = {
   title: string;
   category: string;
   type: "recurring" | "one_off";
+  oneOffTiming?: "week" | "deadline" | null;
   assignee: string;
   assigneeId?: string | null;
   assigneeMode: "member" | "shared" | "unassigned";
@@ -46,6 +47,7 @@ type JoinedInstance = {
     title: string;
     category: string | null;
     type: "recurring" | "one_off";
+    one_off_timing: "week" | "deadline" | null;
     assignee_mode: "member" | "shared" | "unassigned";
     recurrence_rule: Record<string, unknown> | null;
     description: string | null;
@@ -100,7 +102,7 @@ export async function loadHouseholdSnapshot(): Promise<HouseholdSnapshot | null>
       supabase
         .from("task_instances")
         .select(
-          "id, template_id, scheduled_date, status, assignee_profile_id, task_templates!inner(title, category, type, assignee_mode, recurrence_rule, description), completion_records!completion_records_instance_id_fkey(note, completed_at, is_voided)",
+          "id, template_id, scheduled_date, status, assignee_profile_id, task_templates!inner(title, category, type, one_off_timing, assignee_mode, recurrence_rule, description), completion_records!completion_records_instance_id_fkey(note, completed_at, is_voided)",
         )
         .eq("household_id", householdId)
         .order("scheduled_date", { ascending: true }),
@@ -136,6 +138,9 @@ export async function loadHouseholdSnapshot(): Promise<HouseholdSnapshot | null>
       title: row.task_templates.title,
       category: row.task_templates.category ?? "home",
       type: row.task_templates.type,
+      oneOffTiming: row.task_templates.type === "one_off"
+        ? row.task_templates.one_off_timing ?? "deadline"
+        : null,
       assignee,
       assigneeId: row.assignee_profile_id,
       assigneeMode: row.task_templates.assignee_mode,
@@ -213,7 +218,7 @@ export async function createTaskRecord(
   householdId: string,
   task: Pick<
     AppTask,
-    "title" | "category" | "type" | "assigneeMode" | "assigneeId" | "dueDate" | "recurrenceRule"
+    "title" | "category" | "type" | "oneOffTiming" | "assigneeMode" | "assigneeId" | "dueDate" | "recurrenceRule"
   >,
 ) {
   const supabase = getSupabaseClient();
@@ -230,6 +235,7 @@ export async function createTaskRecord(
       title: task.title,
       category: task.category,
       type: task.type,
+      one_off_timing: task.type === "one_off" ? task.oneOffTiming ?? "deadline" : null,
       assignee_mode: task.assigneeMode,
       assignee_profile_id: task.assigneeId ?? null,
       recurrence_rule: task.type === "recurring" ? task.recurrenceRule : null,
@@ -250,7 +256,7 @@ export async function createTaskRecord(
 
 export async function updateTaskRecord(task: Pick<
   AppTask,
-  "id" | "title" | "type" | "assigneeMode" | "assigneeId" | "dueDate" | "recurrenceRule"
+  "id" | "title" | "type" | "oneOffTiming" | "assigneeMode" | "assigneeId" | "dueDate" | "recurrenceRule"
 >) {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error("Supabase 尚未配置");
@@ -258,6 +264,7 @@ export async function updateTaskRecord(task: Pick<
     p_instance_id: task.id,
     p_title: task.title,
     p_type: task.type,
+    p_one_off_timing: task.type === "one_off" ? task.oneOffTiming ?? "deadline" : null,
     p_assignee_mode: task.assigneeMode,
     p_assignee_profile_id: task.assigneeId ?? null,
     p_scheduled_date: task.dueDate,
