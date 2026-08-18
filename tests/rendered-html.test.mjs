@@ -87,6 +87,10 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
   assert.match(app, /useOverlayScrollLock/);
   assert.match(styles, /overscroll-behavior: none/);
   assert.match(styles, /height: 100dvh/);
+  assert.match(styles, /input\[type="datetime-local"\]/);
+  assert.match(styles, /min-inline-size: 0/);
+  assert.match(styles, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /max-width: 100dvw/);
   assert.match(schema, /create or replace function public\.complete_task/);
   assert.match(schema, /create or replace function public\.undo_task_completion/);
   await Promise.all([
