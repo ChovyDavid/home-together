@@ -401,7 +401,8 @@ create or replace function public.update_household_task(
   p_assignee_mode text,
   p_assignee_profile_id uuid,
   p_scheduled_date date,
-  p_recurrence_rule jsonb
+  p_recurrence_rule jsonb,
+  p_completed_at timestamptz
 )
 returns void
 language plpgsql
@@ -409,6 +410,10 @@ security definer set search_path = ''
 as $$
 declare
   instance_row public.task_instances%rowtype;
+  template_row public.task_templates%rowtype;
+  completion_row public.completion_records%rowtype;
+  household_timezone text;
+  next_date date;
 begin
   select * into instance_row
   from public.task_instances
@@ -435,6 +440,12 @@ begin
   end if;
   if p_type = 'one_off' and (p_one_off_timing is null or p_one_off_timing not in ('week', 'deadline')) then
     raise exception '一次性家务必须选择按周完成或截止日期';
+  end if;
+  if instance_row.status = 'completed' and p_completed_at is null then
+    raise exception '已完成家务需要实际完成时间';
+  end if;
+  if p_completed_at is not null and p_completed_at > now() + interval '5 minutes' then
+    raise exception '完成时间不能晚于当前时间';
   end if;
 
   if p_assignee_mode = 'member' then
@@ -473,6 +484,45 @@ begin
     where template_id = instance_row.template_id
       and id <> instance_row.id
       and status = 'pending';
+  end if;
+
+  if instance_row.status = 'completed' then
+    select * into completion_row
+    from public.completion_records
+    where instance_id = instance_row.id and is_voided = false
+    order by completed_at desc
+    limit 1
+    for update;
+
+    if completion_row.id is null then
+      raise exception '找不到有效的完成记录';
+    end if;
+
+    update public.completion_records
+    set completed_at = p_completed_at
+    where id = completion_row.id;
+
+    select * into template_row
+    from public.task_templates
+    where id = instance_row.template_id;
+
+    if template_row.type = 'recurring' and template_row.active then
+      select timezone into household_timezone
+      from public.households
+      where id = instance_row.household_id;
+
+      next_date := public.next_scheduled_date(
+        p_scheduled_date,
+        p_completed_at,
+        household_timezone,
+        template_row.recurrence_rule
+      );
+
+      update public.task_instances
+      set scheduled_date = next_date
+      where generated_from_completion_id = completion_row.id
+        and status = 'pending';
+    end if;
   end if;
 end;
 $$;
@@ -559,7 +609,7 @@ grant execute on function public.create_household_invite(uuid) to authenticated;
 grant execute on function public.join_household_by_invite(text) to authenticated;
 grant execute on function public.complete_task(uuid, text) to authenticated;
 grant execute on function public.undo_task_completion(uuid) to authenticated;
-grant execute on function public.update_household_task(uuid, text, text, text, text, uuid, date, jsonb) to authenticated;
+grant execute on function public.update_household_task(uuid, text, text, text, text, uuid, date, jsonb, timestamptz) to authenticated;
 grant execute on function public.delete_household_task(uuid) to authenticated;
 
 do $$

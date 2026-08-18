@@ -256,7 +256,7 @@ export async function createTaskRecord(
 
 export async function updateTaskRecord(task: Pick<
   AppTask,
-  "id" | "title" | "type" | "oneOffTiming" | "assigneeMode" | "assigneeId" | "dueDate" | "recurrenceRule"
+  "id" | "title" | "type" | "oneOffTiming" | "assigneeMode" | "assigneeId" | "dueDate" | "recurrenceRule" | "completedAt"
 >) {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error("Supabase 尚未配置");
@@ -269,6 +269,7 @@ export async function updateTaskRecord(task: Pick<
     p_assignee_profile_id: task.assigneeId ?? null,
     p_scheduled_date: task.dueDate,
     p_recurrence_rule: task.type === "recurring" ? task.recurrenceRule : null,
+    p_completed_at: task.completedAt ?? null,
   });
   if (error) throw error;
 }

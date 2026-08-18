@@ -296,6 +296,20 @@ function formatWeekRange(start: string) {
   return `${formatShortDate(start)} — ${formatShortDate(addDays(start, 6))}`;
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function toDateTimeLocal(value: string) {
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 function addMonths(monthPrefix: string, amount: number) {
   const [year, month] = monthPrefix.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1 + amount, 1));
@@ -1015,6 +1029,9 @@ function TaskEditorModal({ initialTask, members, onClose, onSave }: { initialTas
     initialTask?.oneOffTiming === "deadline" ? "deadline" : "week",
   );
   const [date, setDate] = useState(initialTask?.dueDate ?? DEMO_TODAY);
+  const [completedAt, setCompletedAt] = useState(
+    initialTask?.completedAt ? toDateTimeLocal(initialTask.completedAt) : "",
+  );
   const [assignee, setAssignee] = useState(
     initialTask?.assigneeMode === "member" ? initialTask.assigneeId ?? "unassigned" : initialTask?.assigneeMode ?? "shared",
   );
@@ -1050,6 +1067,9 @@ function TaskEditorModal({ initialTask, members, onClose, onSave }: { initialTas
       assigneeId: selected?.id ?? null,
       assigneeMode: shared ? "shared" : selected ? "member" : "unassigned",
       dueDate: normalizedDate,
+      completedAt: initialTask?.status === "completed" && completedAt
+        ? new Date(completedAt).toISOString()
+        : initialTask?.completedAt,
       recurrence: type === "recurring" ? recurrenceText(recurrenceKind, normalizedInterval) : undefined,
       recurrenceRule: type === "recurring" ? { kind: recurrenceKind, interval: normalizedInterval, keep_schedule: Boolean(initialTask?.recurrenceRule?.keep_schedule) } : null,
       lastCompleted: type === "recurring" ? initialTask?.lastCompleted : undefined,
@@ -1066,6 +1086,7 @@ function TaskEditorModal({ initialTask, members, onClose, onSave }: { initialTas
           <div className="field"><span>类型</span><div className="type-picker"><button type="button" className={type === "one_off" ? "active" : ""} onClick={() => setType("one_off")}><ClipboardCheck />一次性家事<small>完成后不再重复</small></button><button type="button" className={type === "recurring" ? "active" : ""} onClick={() => setType("recurring")}><Repeat2 />周期家务<small>按节奏自动出现</small></button></div></div>
           {type === "one_off" && <div className="field"><span>完成方式</span><div className="type-picker timing-picker"><button type="button" className={oneOffTiming === "week" ? "active" : ""} onClick={() => setOneOffTiming("week")}><CalendarDays />按周完成<small>在选定的一周内完成即可</small></button><button type="button" className={oneOffTiming === "deadline" ? "active" : ""} onClick={() => setOneOffTiming("deadline")}><Bell />截止日期<small>必须在指定日期前完成</small></button></div></div>}
           <div className="form-grid"><label className="field"><span>{type === "recurring" ? "首次计划日期" : oneOffTiming === "week" ? "选择所在周" : "截止日期"}</span><input type="date" required value={date} onChange={(event) => setDate(event.target.value)} />{type === "one_off" && oneOffTiming === "week" && <small className="week-preview">将作为 {formatWeekRange(mondayWeek(date)[0])} 的本周事项</small>}</label><label className="field"><span>负责人</span><select value={assignee} onChange={(event) => setAssignee(event.target.value)}><option value="shared">共同</option>{members.map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}<option value="unassigned">未分配</option></select></label></div>
+          {initialTask?.status === "completed" && <label className="field"><span>实际完成时间</span><input type="datetime-local" required max={toDateTimeLocal(new Date().toISOString())} value={completedAt} onChange={(event) => setCompletedAt(event.target.value)} /><small className="week-preview">修改后，周期家务的下一次计划日期会同步重新计算。</small></label>}
           {type === "recurring" && <label className="field recurrence-field"><span>重复节奏</span><div><span>每</span><input type="number" min={1} max={365} value={interval} onChange={(event) => setInterval(Number(event.target.value))} /><select aria-label="重复周期单位" value={recurrenceKind} onChange={(event) => setRecurrenceKind(event.target.value as RecurrenceKind)}><option value="interval_days">天</option><option value="weekly">周</option><option value="monthly">月</option></select></div><small>默认从实际完成日重新计算下一次。</small></label>}
           <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button">{editing ? <Pencil /> : <Plus />}{editing ? "保存修改" : "加入清单"}</button></div>
         </form>
@@ -1100,7 +1121,7 @@ function TaskDetail({ task, onClose, onToggle, onEdit, onDelete }: { task: AppTa
         {task.description && <p className="detail-description">{task.description}</p>}
         <div className="detail-facts"><div><Clock3 /><span>{task.type === "recurring" ? "计划日期" : isWeekOneOff(task) ? "完成周" : "截止日期"}</span><strong>{isWeekOneOff(task) ? formatWeekRange(task.dueDate) : formatShortDate(task.dueDate)}</strong></div><div><CircleUserRound /><span>负责人</span><strong>{task.assignee}</strong></div>{task.recurrence && <div><Repeat2 /><span>重复规则</span><strong>{task.recurrence}</strong></div>}</div>
         {task.type === "recurring" && <section className="rhythm-card"><h3>这个事项的节奏</h3><div><p><span>上次完成</span><strong>{task.lastCompleted ?? "还没有记录"}</strong></p><i /><p><span>下次应做</span><strong>{task.nextDue ?? formatShortDate(task.dueDate)}</strong></p></div><small>提前完成后，默认从实际完成日重新计算。</small></section>}
-        <section className="history-section"><h3>最近记录</h3>{task.status === "completed" ? <div className="history-item"><span><Check /></span><div><strong>{task.completedAt ? formatShortDate(task.completedAt.slice(0, 10)) : "今天"} 完成</strong><p>{task.note || "没有添加备注"}</p></div></div> : <EmptyState message="完成后会在这里留下记录。" />}</section>
+        <section className="history-section"><h3>最近记录</h3>{task.status === "completed" ? <div className="history-item"><span><Check /></span><div><strong>{task.completedAt ? formatDateTime(task.completedAt) : "今天"} 完成</strong><p>{task.note || "没有添加备注"}</p></div></div> : <EmptyState message="完成后会在这里留下记录。" />}</section>
         <div className="detail-actions"><button className={task.status === "completed" ? "secondary-button wide" : "primary-button wide"} onClick={() => onToggle(task)}>{task.status === "completed" ? "撤销完成" : <><Check />标记完成</>}</button><button className="secondary-button wide" onClick={() => onEdit(task)}><Pencil />编辑家务</button><button className="danger-button wide" onClick={() => onDelete(task)}><Trash2 />删除家务</button></div>
       </aside>
     </div>
