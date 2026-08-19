@@ -17,7 +17,7 @@ test("builds a GitHub Pages-ready Home Together application", async () => {
 });
 
 test("ships a subpath-safe installable PWA and Supabase security baseline", async () => {
-  const [manifestText, serviceWorker, schema, householdMigration, inviteMigration, taskMutationMigration, oneOffTimingMigration, completionTimeMigration, app, styles, tasks, workflow, pagesConfig, packageJson] = await Promise.all([
+  const [manifestText, serviceWorker, schema, householdMigration, inviteMigration, taskMutationMigration, oneOffTimingMigration, completionTimeMigration, shoppingMigration, app, styles, tasks, shopping, workflow, pagesConfig, packageJson] = await Promise.all([
     readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
     readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8"),
@@ -26,9 +26,11 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
     readFile(new URL("../supabase/migrations/202608160003_task_edit_delete.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608170001_one_off_task_timing.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608180001_edit_completion_time.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608190001_shopping_lists.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/HomeTogetherApp.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../lib/supabase/tasks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/shopping.ts", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/deploy-pages.yml", import.meta.url), "utf8"),
     readFile(new URL("../vite.pages.config.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -54,7 +56,7 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
   assert.match(inviteMigration, /pg_catalog\.gen_random_uuid/);
   assert.doesNotMatch(inviteMigration, /encode\(gen_random_bytes/);
   assert.match(tasks, /completion_records!completion_records_instance_id_fkey/);
-  assert.match(app, /member\.id === currentUserId/);
+  assert.match(app, /right\.id === currentUserId/);
   assert.doesNotMatch(app, /<option>Nicole<\/option><option>伴侣<\/option>/);
   assert.match(tasks, /table: "household_members"/);
   assert.match(tasks, /update_household_task/);
@@ -95,6 +97,21 @@ test("ships a subpath-safe installable PWA and Supabase security baseline", asyn
   assert.match(styles, /min-inline-size: 0/);
   assert.match(styles, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /max-width: 100dvw/);
+  assert.match(app, /id: "shopping", label: "买菜单"/);
+  assert.doesNotMatch(app, /id: "settings"/);
+  assert.match(app, /Costco/);
+  assert.match(app, /H-Mart/);
+  assert.match(app, /H-E-B/);
+  assert.match(app, /要清空这个买菜单吗/);
+  assert.match(schema, /create table if not exists public\.shopping_lists/);
+  assert.match(schema, /create table if not exists public\.shopping_items/);
+  assert.match(shoppingMigration, /seed_default_shopping_lists/);
+  assert.match(shoppingMigration, /'Costco'/);
+  assert.match(shoppingMigration, /'H-Mart'/);
+  assert.match(shoppingMigration, /'H-E-B'/);
+  assert.match(shoppingMigration, /enable row level security/);
+  assert.match(shopping, /subscribeToShoppingLists/);
+  assert.match(shopping, /clearShoppingListItems/);
   assert.match(schema, /create or replace function public\.complete_task/);
   assert.match(schema, /create or replace function public\.undo_task_completion/);
   await Promise.all([

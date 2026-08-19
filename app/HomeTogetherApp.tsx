@@ -11,29 +11,23 @@ import {
   CircleUserRound,
   ClipboardCheck,
   Clock3,
-  Copy,
   Droplets,
   Heart,
   Home,
   LayoutList,
   LockKeyhole,
-  LogOut,
   Mail,
-  Moon,
   MoreHorizontal,
   PawPrint,
   Pencil,
   Plus,
   Repeat2,
   Search,
-  Settings,
+  ShoppingCart,
   Sparkles,
-  Sun,
+  Store,
   Trash2,
-  UserPlus,
   WashingMachine,
-  Wifi,
-  WifiOff,
   Wrench,
   X,
   type LucideIcon,
@@ -47,12 +41,22 @@ import {
 } from "react";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
+  type ShoppingItem,
+  type ShoppingList,
+  clearShoppingListItems,
+  createShoppingItemRecord,
+  createShoppingListRecord,
+  deleteShoppingItemRecord,
+  loadShoppingLists,
+  setShoppingItemChecked,
+  subscribeToShoppingLists,
+} from "@/lib/supabase/shopping";
+import {
   type AppTask,
   type HouseholdMember,
   type HouseholdSnapshot,
   completeTaskRecord,
   createHousehold,
-  createInvite,
   createTaskRecord,
   deleteTaskRecord,
   joinHousehold,
@@ -63,7 +67,7 @@ import {
   updateTaskRecord,
 } from "@/lib/supabase/tasks";
 
-type ViewKey = "week" | "calendar" | "tasks" | "settings";
+type ViewKey = "week" | "calendar" | "tasks" | "shopping";
 
 const WEEK_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
@@ -132,6 +136,12 @@ function useOverlayScrollLock(active: boolean) {
 const DEMO_MEMBERS: HouseholdMember[] = [
   { id: "nicole", displayName: "Nicole", avatarUrl: null },
   { id: "partner", displayName: "伴侣", avatarUrl: null },
+];
+
+const DEMO_SHOPPING_LISTS: ShoppingList[] = [
+  { id: "shopping-costco", name: "Costco", sortOrder: 0, items: [] },
+  { id: "shopping-hmart", name: "H-Mart", sortOrder: 1, items: [] },
+  { id: "shopping-heb", name: "H-E-B", sortOrder: 2, items: [] },
 ];
 
 const DEMO_TASKS: AppTask[] = [
@@ -284,7 +294,7 @@ const NAV_ITEMS: Array<{ id: ViewKey; label: string; icon: LucideIcon }> = [
   { id: "week", label: "本周", icon: Home },
   { id: "calendar", label: "月历", icon: CalendarDays },
   { id: "tasks", label: "全部事项", icon: LayoutList },
-  { id: "settings", label: "设置", icon: Settings },
+  { id: "shopping", label: "买菜单", icon: ShoppingCart },
 ];
 
 function formatShortDate(value: string) {
@@ -642,14 +652,26 @@ function AppShell({
   refresh: () => Promise<void>;
   loadError: string;
 }) {
+  const householdId = snapshot?.householdId;
   const [view, setView] = useState<ViewKey>("week");
   const [tasks, setTasks] = useState<AppTask[]>(isDemo ? DEMO_TASKS : snapshot?.tasks ?? []);
+  const [shoppingLists, setShoppingLists] = useState<ShoppingList[]>(
+    isDemo ? DEMO_SHOPPING_LISTS.map((list) => ({ ...list, items: [...list.items] })) : [],
+  );
+  const [shoppingError, setShoppingError] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [noteTarget, setNoteTarget] = useState<AppTask | null>(null);
   const [detailTarget, setDetailTarget] = useState<AppTask | null>(null);
   const [editTarget, setEditTarget] = useState<AppTask | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AppTask | null>(null);
   const [toast, setToast] = useState("");
+
+  const refreshShopping = useCallback(async () => {
+    if (isDemo || !householdId) return;
+    const lists = await loadShoppingLists(householdId);
+    setShoppingLists(lists);
+    setShoppingError("");
+  }, [isDemo, householdId]);
 
   useOverlayScrollLock(Boolean(showAdd || noteTarget || detailTarget || editTarget || deleteTarget));
 
@@ -658,6 +680,22 @@ function AppShell({
     const timer = window.setTimeout(() => setTasks(snapshot.tasks), 0);
     return () => window.clearTimeout(timer);
   }, [isDemo, snapshot]);
+  useEffect(() => {
+    if (isDemo || !householdId) return;
+    const timer = window.setTimeout(() => {
+      void refreshShopping().catch((caught) => {
+        setShoppingError(formatAppError(caught, "买菜单加载失败"));
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isDemo, householdId, refreshShopping]);
+  useEffect(() => {
+    if (isDemo || !householdId) return;
+    const channel = subscribeToShoppingLists(householdId, () => {
+      void refreshShopping().catch(() => setShoppingError("买菜单同步失败，请稍后重试"));
+    });
+    return () => { if (channel) void getSupabaseClient()?.removeChannel(channel); };
+  }, [isDemo, householdId, refreshShopping]);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(""), 3600);
@@ -772,6 +810,125 @@ function AppShell({
     }
   }
 
+  async function addShoppingList(name: string) {
+    const normalizedName = name.trim();
+    if (!normalizedName) return null;
+    if (shoppingLists.some((list) => list.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase())) {
+      setToast("已经有同名的买菜单了");
+      return null;
+    }
+
+    const sortOrder = Math.max(-1, ...shoppingLists.map((list) => list.sortOrder)) + 1;
+    if (isDemo) {
+      const created: ShoppingList = {
+        id: `shopping-${Date.now()}`,
+        name: normalizedName,
+        sortOrder,
+        items: [],
+      };
+      setShoppingLists((current) => [...current, created]);
+      setToast(`已创建 ${normalizedName} 买菜单`);
+      return created.id;
+    }
+    if (!snapshot) return null;
+
+    try {
+      const row = await createShoppingListRecord(snapshot.householdId, normalizedName, sortOrder);
+      const created: ShoppingList = { id: row.id, name: row.name, sortOrder: row.sort_order, items: [] };
+      setShoppingLists((current) => current.some((list) => list.id === created.id)
+        ? current
+        : [...current, created]);
+      setToast(`已创建 ${normalizedName} 买菜单`);
+      return created.id;
+    } catch (caught) {
+      setToast(formatAppError(caught, "创建买菜单失败，请重试"));
+      return null;
+    }
+  }
+
+  async function addShoppingItem(listId: string, name: string) {
+    const normalizedName = name.trim();
+    if (!normalizedName || !snapshot && !isDemo) return false;
+
+    if (isDemo) {
+      const item: ShoppingItem = {
+        id: `shopping-item-${Date.now()}`,
+        name: normalizedName,
+        checked: false,
+        createdAt: new Date().toISOString(),
+      };
+      setShoppingLists((current) => current.map((list) =>
+        list.id === listId ? { ...list, items: [...list.items, item] } : list,
+      ));
+      return true;
+    }
+
+    try {
+      await createShoppingItemRecord(snapshot!.householdId, listId, normalizedName);
+      await refreshShopping();
+      return true;
+    } catch (caught) {
+      setToast(formatAppError(caught, "添加商品失败，请重试"));
+      return false;
+    }
+  }
+
+  async function toggleShoppingItem(listId: string, item: ShoppingItem) {
+    const previousLists = shoppingLists;
+    const checked = !item.checked;
+    setShoppingLists((current) => current.map((list) => list.id === listId
+      ? { ...list, items: list.items.map((currentItem) => currentItem.id === item.id ? { ...currentItem, checked } : currentItem) }
+      : list));
+
+    if (!isDemo) {
+      try {
+        await setShoppingItemChecked(item.id, checked);
+      } catch (caught) {
+        setShoppingLists(previousLists);
+        setToast(formatAppError(caught, "更新失败，已恢复原状态"));
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async function deleteShoppingItem(listId: string, item: ShoppingItem) {
+    const previousLists = shoppingLists;
+    setShoppingLists((current) => current.map((list) => list.id === listId
+      ? { ...list, items: list.items.filter((currentItem) => currentItem.id !== item.id) }
+      : list));
+
+    if (!isDemo) {
+      try {
+        await deleteShoppingItemRecord(item.id);
+      } catch (caught) {
+        setShoppingLists(previousLists);
+        setToast(formatAppError(caught, "删除失败，商品已恢复"));
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async function clearShoppingList(listId: string) {
+    const previousLists = shoppingLists;
+    setShoppingLists((current) => current.map((list) =>
+      list.id === listId ? { ...list, items: [] } : list,
+    ));
+
+    if (!isDemo) {
+      try {
+        await clearShoppingListItems(listId);
+      } catch (caught) {
+        setShoppingLists(previousLists);
+        setToast(formatAppError(caught, "清空失败，商品已恢复"));
+        return false;
+      }
+    }
+    setToast("买菜单已清空，可以准备下一次采购了");
+    return true;
+  }
+
   return (
     <div className="app-frame">
       <aside className="sidebar">
@@ -798,11 +955,11 @@ function AppShell({
         <header className="mobile-header">
           <div className="brand-lockup compact"><BrandMark /><div><strong>HOME TOGETHER</strong><span>{householdName}</span></div></div>
         </header>
-        {loadError && <div className="inline-alert">{loadError}</div>}
+        {(loadError || shoppingError) && <div className="inline-alert">{loadError || shoppingError}</div>}
         {view === "week" && <WeekView tasks={tasks} members={members} onToggle={toggleTask} onOpen={setDetailTarget} onAdd={() => setShowAdd(true)} />}
         {view === "calendar" && <CalendarView tasks={tasks} members={members} onOpen={setDetailTarget} />}
         {view === "tasks" && <AllTasksView tasks={tasks} onToggle={toggleTask} onOpen={setDetailTarget} onAdd={() => setShowAdd(true)} />}
-        {view === "settings" && <SettingsView isDemo={isDemo} snapshot={snapshot} session={session} members={members} />}
+        {view === "shopping" && <ShoppingView lists={shoppingLists} onAddList={addShoppingList} onAddItem={addShoppingItem} onToggleItem={toggleShoppingItem} onDeleteItem={deleteShoppingItem} onClearList={clearShoppingList} />}
       </main>
 
       <nav className="bottom-nav" aria-label="移动端导航">
@@ -811,7 +968,7 @@ function AppShell({
         ))}
       </nav>
 
-      {view !== "settings" && <button className="floating-add" onClick={() => setShowAdd(true)} aria-label="添加事项"><Plus /></button>}
+      {view !== "shopping" && <button className="floating-add" onClick={() => setShowAdd(true)} aria-label="添加事项"><Plus /></button>}
       {showAdd && <TaskEditorModal members={members} onClose={() => setShowAdd(false)} onSave={addTask} />}
       {noteTarget && <CompletionSheet task={noteTarget} onClose={() => setNoteTarget(null)} onSave={saveNote} />}
       {detailTarget && <TaskDetail task={tasks.find((task) => task.id === detailTarget.id) ?? detailTarget} onClose={() => setDetailTarget(null)} onToggle={(task) => { setDetailTarget(null); void toggleTask(task); }} onEdit={(task) => { setDetailTarget(null); setEditTarget(task); }} onDelete={(task) => { setDetailTarget(null); setDeleteTarget(task); }} />}
@@ -980,43 +1137,126 @@ function AllTasksView({ tasks, onToggle, onOpen, onAdd }: { tasks: AppTask[]; on
   );
 }
 
-function SettingsView({ isDemo, snapshot, session, members }: { isDemo: boolean; snapshot: HouseholdSnapshot | null; session: Session | null; members: HouseholdMember[] }) {
-  const [inviteCode, setInviteCode] = useState(isDemo ? "NICOLE26" : "");
-  const [copied, setCopied] = useState(false);
-  const [weekStart, setWeekStart] = useState("monday");
-  const [theme, setTheme] = useState("system");
-  const [message, setMessage] = useState("");
-  const currentUserId = session?.user.id ?? (isDemo ? members[0]?.id : null);
+function ShoppingView({
+  lists,
+  onAddList,
+  onAddItem,
+  onToggleItem,
+  onDeleteItem,
+  onClearList,
+}: {
+  lists: ShoppingList[];
+  onAddList: (name: string) => Promise<string | null>;
+  onAddItem: (listId: string, name: string) => Promise<boolean>;
+  onToggleItem: (listId: string, item: ShoppingItem) => Promise<boolean>;
+  onDeleteItem: (listId: string, item: ShoppingItem) => Promise<boolean>;
+  onClearList: (listId: string) => Promise<boolean>;
+}) {
+  const [selectedListId, setSelectedListId] = useState(lists[0]?.id ?? "");
+  const [newItemName, setNewItemName] = useState("");
+  const [newListName, setNewListName] = useState("");
+  const [showNewList, setShowNewList] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [clearTarget, setClearTarget] = useState<ShoppingList | null>(null);
 
-  async function generateInvite() {
-    if (isDemo) { setInviteCode("NICOLE26"); return; }
-    if (!snapshot) return;
-    try { setInviteCode(await createInvite(snapshot.householdId)); }
-    catch (caught) { setMessage(formatAppError(caught, "暂时无法生成邀请码")); }
+  useOverlayScrollLock(Boolean(clearTarget));
+
+  useEffect(() => {
+    if (lists.some((list) => list.id === selectedListId)) return;
+    const timer = window.setTimeout(() => setSelectedListId(lists[0]?.id ?? ""), 0);
+    return () => window.clearTimeout(timer);
+  }, [lists, selectedListId]);
+
+  const selectedList = lists.find((list) => list.id === selectedListId) ?? lists[0];
+  const checkedCount = selectedList?.items.filter((item) => item.checked).length ?? 0;
+  const totalCount = selectedList?.items.length ?? 0;
+
+  async function submitNewList(event: FormEvent) {
+    event.preventDefault();
+    if (!newListName.trim()) return;
+    setBusy(true);
+    const newId = await onAddList(newListName);
+    setBusy(false);
+    if (!newId) return;
+    setSelectedListId(newId);
+    setNewListName("");
+    setShowNewList(false);
   }
 
-  async function copyInvite() {
-    if (!inviteCode) await generateInvite();
-    const value = inviteCode || "NICOLE26";
-    await navigator.clipboard?.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+  async function submitNewItem(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedList || !newItemName.trim()) return;
+    setBusy(true);
+    const saved = await onAddItem(selectedList.id, newItemName);
+    setBusy(false);
+    if (saved) setNewItemName("");
   }
 
-  async function signOut() { await getSupabaseClient()?.auth.signOut(); }
+  async function toggleItem(item: ShoppingItem) {
+    if (!selectedList) return;
+    const completesList = !item.checked
+      && selectedList.items.length > 0
+      && selectedList.items.every((current) => current.id === item.id || current.checked);
+    const saved = await onToggleItem(selectedList.id, item);
+    if (saved && completesList) setClearTarget(selectedList);
+  }
+
+  async function confirmClear() {
+    if (!clearTarget) return;
+    setBusy(true);
+    const cleared = await onClearList(clearTarget.id);
+    setBusy(false);
+    if (cleared) setClearTarget(null);
+  }
 
   return (
-    <div className="page-shell settings-page">
-      <section className="page-heading"><div><p className="eyebrow">我们的家</p><h1>设置</h1><p className="heading-copy">成员、时间和偏好，都可以慢慢调整。</p></div><span className={`connection-pill ${isDemo ? "demo" : "live"}`}>{isDemo ? <WifiOff /> : <Wifi />}{isDemo ? "演示模式" : "已连接 Supabase"}</span></section>
-      <div className="settings-grid">
-        <section className="settings-card"><div className="settings-card-heading"><span className="setting-icon mauve"><CircleUserRound /></span><div><h2>家庭成员</h2><p>双方拥有完整协作权限</p></div></div><div className="member-list">{members.map((member) => { const isCurrentUser = member.id === currentUserId; return <div key={member.id}><Avatar name={member.displayName} /><p><strong>{member.displayName}</strong><span>{isCurrentUser ? session?.user.email ?? "当前账号" : "家庭成员"}</span></p><span className="role-pill">{isCurrentUser ? "你" : "成员"}</span></div>; })}</div><div className="invite-box"><div><UserPlus /><p><strong>邀请伴侣加入</strong><span>邀请码 7 天内有效，仅可使用一次。</span></p></div>{inviteCode ? <div className="invite-code"><strong>{inviteCode}</strong><button onClick={copyInvite}>{copied ? <Check /> : <Copy />}{copied ? "已复制" : "复制"}</button></div> : <button className="secondary-button" onClick={generateInvite}>生成邀请码</button>}</div></section>
-        <section className="settings-card"><div className="settings-card-heading"><span className="setting-icon lavender"><CalendarDays /></span><div><h2>日期与时间</h2><p>决定周视图和日期边界</p></div></div><div className="setting-row"><div><strong>每周从哪天开始</strong><span>影响本周分组与月历排列</span></div><select aria-label="每周开始日" value={weekStart} onChange={(event) => setWeekStart(event.target.value)}><option value="monday">周一</option><option value="sunday">周日</option></select></div><div className="setting-row"><div><strong>家庭时区</strong><span>完成时间统一保存，按此时区显示</span></div><span className="value-chip">{snapshot?.timezone ?? "America/Chicago"}</span></div></section>
-        <section className="settings-card"><div className="settings-card-heading"><span className="setting-icon mint"><Sun /></span><div><h2>外观</h2><p>选择更舒服的阅读方式</p></div></div><div className="theme-options"><button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}><Sun />浅色</button><button className={theme === "system" ? "active" : ""} onClick={() => setTheme("system")}><Sparkles />跟随系统</button><button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}><Moon />深色</button></div><div className="toggle-row"><div><strong>轻量庆祝动效</strong><span>完成任务时显示不超过 500ms</span></div><input aria-label="轻量庆祝动效" type="checkbox" defaultChecked /><i /></div></section>
-        <section className="settings-card"><div className="settings-card-heading"><span className="setting-icon cream"><Bell /></span><div><h2>提醒</h2><p>这个功能会在后续版本开放</p></div></div><div className="coming-soon"><Bell /><div><strong>每日摘要与到期提醒</strong><span>现在先保持安静，需要时再打开。</span></div><span>P2</span></div></section>
-      </div>
-      {isDemo && <div className="demo-callout"><WifiOff /><div><strong>你正在使用可操作的演示数据</strong><span>配置 Supabase 环境变量并执行 schema.sql 后，登录、双人同步和行级权限会自动启用。</span></div></div>}
-      {!isDemo && <button className="sign-out-button" onClick={signOut}><LogOut />退出登录</button>}
-      {message && <p className="form-message error">{message}</p>}
+    <div className="page-shell shopping-page">
+      <section className="page-heading">
+        <div><p className="eyebrow">一起采购</p><h1>买菜单</h1><p className="heading-copy">按商店记下要买的东西，买到一件就勾掉一件。</p></div>
+        <button className="primary-button" onClick={() => setShowNewList((current) => !current)}><Plus />新增买菜单</button>
+      </section>
+
+      {showNewList && <form className="new-shopping-list" onSubmit={submitNewList}>
+        <label htmlFor="new-shopping-list">买菜单名称</label>
+        <div><input id="new-shopping-list" required maxLength={60} value={newListName} onChange={(event) => setNewListName(event.target.value)} placeholder="例如：Trader Joe's" /><button className="primary-button" disabled={busy}><Plus />创建</button><button type="button" className="secondary-button" onClick={() => { setShowNewList(false); setNewListName(""); }}>取消</button></div>
+      </form>}
+
+      <section className="shopping-board">
+        <div className="shopping-toolbar">
+          <label htmlFor="shopping-list-select"><Store /><span>当前买菜单</span></label>
+          <select id="shopping-list-select" value={selectedList?.id ?? ""} onChange={(event) => setSelectedListId(event.target.value)} disabled={!lists.length}>
+            {lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
+          </select>
+          <div className="shopping-count"><strong>{checkedCount}/{totalCount}</strong><span>已买到</span></div>
+        </div>
+
+        {selectedList ? <>
+          <form className="shopping-add-item" onSubmit={submitNewItem}>
+            <label className="sr-only" htmlFor="new-shopping-item">添加要买的东西</label>
+            <input id="new-shopping-item" required maxLength={120} value={newItemName} onChange={(event) => setNewItemName(event.target.value)} placeholder={`添加要从 ${selectedList.name} 买的东西`} autoComplete="off" />
+            <button className="primary-button" disabled={busy}><Plus />加入清单</button>
+          </form>
+
+          <div className="shopping-progress" aria-label={`已购买 ${checkedCount} 件，共 ${totalCount} 件`}><i style={{ width: `${totalCount ? (checkedCount / totalCount) * 100 : 0}%` }} /></div>
+
+          <div className="shopping-items">
+            {selectedList.items.length ? selectedList.items.map((item) => <div className={`shopping-item ${item.checked ? "checked" : ""}`} key={item.id}>
+              <button className="shopping-checkbox" role="checkbox" aria-checked={item.checked} aria-label={`${item.checked ? "取消购买" : "标记已购买"}：${item.name}`} onClick={() => void toggleItem(item)}><Check /></button>
+              <span>{item.name}</span>
+              <button className="shopping-delete" aria-label={`删除：${item.name}`} onClick={() => void onDeleteItem(selectedList.id, item)}><Trash2 /></button>
+            </div>) : <div className="shopping-empty"><ShoppingCart /><h2>{selectedList.name} 还没有商品</h2><p>在上方输入要买的东西，家庭成员会看到同一份清单。</p></div>}
+          </div>
+        </> : <div className="shopping-empty"><Store /><h2>先创建一个买菜单</h2><p>你可以按商店或采购场景分别整理。</p></div>}
+      </section>
+
+      {clearTarget && <div className="modal-backdrop">
+        <section className="modal-card delete-modal shopping-clear-dialog" role="alertdialog" aria-modal="true" aria-labelledby="shopping-clear-title" aria-describedby="shopping-clear-description">
+          <span className="shopping-clear-icon"><Check /></span>
+          <h2 id="shopping-clear-title">{clearTarget.name} 的东西都买齐了</h2>
+          <p id="shopping-clear-description">要清空这个买菜单吗？清空后就可以开始记录下一次采购。</p>
+          <div className="modal-actions"><button className="secondary-button" onClick={() => setClearTarget(null)} disabled={busy}>暂时保留</button><button className="primary-button" onClick={() => void confirmClear()} disabled={busy}><Trash2 />清空菜单</button></div>
+        </section>
+      </div>}
     </div>
   );
 }
